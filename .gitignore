@@ -1,0 +1,6 @@
+# build artifacts
+buttress
+fb
+
+# local Claude Code settings
+.claude/settings.local.json
