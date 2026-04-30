@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"time"
@@ -52,14 +53,21 @@ func runList(asJSON bool) error {
 		return err
 	}
 
+	return renderList(lock, asJSON, os.Stdout, os.Stderr)
+}
+
+// renderList writes the lock map to stdout in either a human-readable table
+// or as indented JSON. The empty-state hint is written to stderr so it does
+// not pollute scripts that pipe stdout.
+func renderList(lock map[string]store.LockEntry, asJSON bool, stdout, stderr io.Writer) error {
 	if asJSON {
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(stdout)
 		enc.SetIndent("", "  ")
 		return enc.Encode(lock)
 	}
 
 	if len(lock) == 0 {
-		fmt.Fprintln(os.Stderr, tui.StyleDim.Render("No specs installed. Run 'buttress add @org/pkg' to get started."))
+		fmt.Fprintln(stderr, tui.StyleDim.Render("No specs installed. Run 'buttress add @org/pkg' to get started."))
 		return nil
 	}
 
@@ -71,7 +79,7 @@ func runList(asJSON bool) error {
 
 	for _, k := range keys {
 		e := lock[k]
-		fmt.Printf("%s  %s  %s\n",
+		fmt.Fprintf(stdout, "%s  %s  %s\n",
 			tui.StyleTitle.Render(store.LockKey(e.Org, e.Pkg)),
 			tui.ShortHash(e.Hash),
 			tui.StyleDim.Render(e.InstalledAt.Local().Format(time.RFC3339)))
