@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,9 +19,55 @@ import (
 	"buttress/internal/ref"
 	"buttress/internal/store"
 	"buttress/internal/tui"
+	"buttress/internal/versions"
 )
 
+// addDeps bundles the I/O and interactive dependencies of `buttress add` so
+// they can be swapped in tests.
+type addDeps struct {
+	loadConfig     func() (*config.Config, error)
+	newClient      func() specClient
+	runPicker      func(pkg string, vs []versions.Version) (*versions.Version, error)
+	versionsURLFor func(pkg ref.PackageRef) string
+	newStore       func(cacheDir, projectDir string) (*store.Store, error)
+	newGenerator   func(cfg *config.Config) generate.Generator
+	getwd          func() (string, error)
+	stdout         io.Writer
+	stderr         io.Writer
+	now            func() time.Time
+}
+
+// specClient covers the github.Client surface used by `buttress add`.
+type specClient interface {
+	ListVersionsFromURL(ctx context.Context, url string) ([]versions.Version, error)
+	FetchSpec(ctx context.Context, pkg ref.PackageRef, expectedHash, destDir string) (*generate.SpecArchive, error)
+}
+
+func defaultAddDeps() *addDeps {
+	return &addDeps{
+		loadConfig:     config.Load,
+		newClient:      func() specClient { return github.New() },
+		runPicker:      tui.RunPicker,
+		versionsURLFor: github.VersionsURL,
+		newStore:       store.New,
+		newGenerator: func(cfg *config.Config) generate.Generator {
+			return generate.NewLLMGenerator(generate.LLMConfig{
+				Provider: cfg.LLM.Provider,
+				BaseURL:  cfg.LLM.BaseURL,
+				APIKey:   cfg.LLM.APIKey,
+				Model:    cfg.LLM.Model,
+			})
+		},
+		getwd:  os.Getwd,
+		stdout: os.Stdout,
+		stderr: os.Stderr,
+		now:    func() time.Time { return time.Now().UTC() },
+	}
+}
+
 func newAddCmd() *cobra.Command {
+	deps := defaultAddDeps()
+
 	var (
 		versionsURL string
 		doGenerate  bool
@@ -42,7 +89,7 @@ Examples:
   buttress add @chrisbodhi/left-pad --generate`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runAdd(cmd.Context(), args[0], versionsURL, doGenerate)
+			return runAdd(cmd.Context(), deps, args[0], versionsURL, doGenerate)
 		},
 	}
 
@@ -54,9 +101,9 @@ Examples:
 	return cmd
 }
 
-func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) error {
+func runAdd(ctx context.Context, deps *addDeps, rawRef, versionsURL string, doGenerate bool) error {
 	// --- 0. Load config (fail early for --generate without LLM) ---
-	cfg, err := config.Load()
+	cfg, err := deps.loadConfig()
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
@@ -70,7 +117,7 @@ func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) er
 		return err
 	}
 
-	ghClient := github.New()
+	ghClient := deps.newClient()
 
 	// --- 2. Resolve the content hash ---
 	hash := pkg.GitRef // GitRef holds the hash when provided inline (@org/pkg@sha256:...)
@@ -78,17 +125,17 @@ func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) er
 		// No hash provided — fetch the version list and let the user pick.
 		url := versionsURL
 		if url == "" {
-			url = github.VersionsURL(pkg)
+			url = deps.versionsURLFor(pkg)
 		}
 
-		fmt.Fprintf(os.Stderr, "%s\n", tui.StyleDim.Render(fmt.Sprintf("fetching version list from %s…", url)))
+		fmt.Fprintf(deps.stderr, "%s\n", tui.StyleDim.Render(fmt.Sprintf("fetching version list from %s…", url)))
 
 		vs, err := ghClient.ListVersionsFromURL(ctx, url)
 		if err != nil {
 			return fmt.Errorf("listing versions for %s: %w", pkg.Name(), err)
 		}
 
-		chosen, err := tui.RunPicker(pkg.Name(), vs)
+		chosen, err := deps.runPicker(pkg.Name(), vs)
 		if err != nil {
 			return err
 		}
@@ -99,7 +146,7 @@ func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) er
 	}
 
 	// --- 3. Check if already installed ---
-	st, err := store.New(cfg.Registry.CacheDir, "")
+	st, err := deps.newStore(cfg.Registry.CacheDir, "")
 	if err != nil {
 		return err
 	}
@@ -111,14 +158,14 @@ func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) er
 
 	key := store.LockKey(pkg.Org, pkg.Pkg)
 	if existing, ok := lock[key]; ok && existing.Hash == hash {
-		fmt.Printf("%s %s is already installed at %s\n",
+		fmt.Fprintf(deps.stdout, "%s %s is already installed at %s\n",
 			tui.StyleSuccess.Render("✓"),
 			tui.StyleTitle.Render(pkg.Name()),
 			tui.StyleDim.Render(tui.ShortHash(hash)))
 		return nil
 	}
 	if existing, ok := lock[key]; ok {
-		fmt.Printf("%s %s is currently at %s — replacing with %s\n",
+		fmt.Fprintf(deps.stdout, "%s %s is currently at %s — replacing with %s\n",
 			tui.StyleDim.Render("~"),
 			tui.StyleTitle.Render(pkg.Name()),
 			tui.StyleDim.Render(tui.ShortHash(existing.Hash)),
@@ -126,7 +173,7 @@ func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) er
 	}
 
 	// --- 4. Download and verify the spec ---
-	fmt.Fprintf(os.Stderr, "%s\n",
+	fmt.Fprintf(deps.stderr, "%s\n",
 		tui.StyleDim.Render(fmt.Sprintf("downloading %s@%s…", pkg.Name(), tui.ShortHash(hash))))
 
 	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("buttress-%s-%s-%s", pkg.Org, pkg.Pkg, sanitize(hash)))
@@ -146,20 +193,20 @@ func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) er
 		Org:         pkg.Org,
 		Pkg:         pkg.Pkg,
 		Hash:        hash,
-		InstalledAt: time.Now().UTC(),
+		InstalledAt: deps.now(),
 	}
 	if err := st.WriteLock(lock); err != nil {
 		return err
 	}
 
-	fmt.Printf("%s added %s (%s)\n",
+	fmt.Fprintf(deps.stdout, "%s added %s (%s)\n",
 		tui.StyleSuccess.Render("✓"),
 		tui.StyleTitle.Render(pkg.Name()),
 		tui.StyleDim.Render(tui.ShortHash(hash)))
 
 	// --- 7. Optionally generate ---
 	if doGenerate {
-		wd, err := os.Getwd()
+		wd, err := deps.getwd()
 		if err != nil {
 			return fmt.Errorf("determining working directory: %w", err)
 		}
@@ -168,15 +215,10 @@ func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) er
 			return err
 		}
 
-		fmt.Fprintf(os.Stderr, "%s\n",
+		fmt.Fprintf(deps.stderr, "%s\n",
 			tui.StyleDim.Render(fmt.Sprintf("generating %s implementation → %s…", lang, outPath)))
 
-		gen := generate.NewLLMGenerator(generate.LLMConfig{
-			Provider: cfg.LLM.Provider,
-			BaseURL:  cfg.LLM.BaseURL,
-			APIKey:   cfg.LLM.APIKey,
-			Model:    cfg.LLM.Model,
-		})
+		gen := deps.newGenerator(cfg)
 		req := generate.Request{
 			Spec:        archive,
 			Language:    lang,
@@ -185,10 +227,13 @@ func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) er
 			ProjectDir:  wd,
 		}
 		if err := gen.Generate(ctx, req); err != nil {
+			if errors.Is(err, generate.ErrNotConfigured) {
+				return err
+			}
 			return fmt.Errorf("generation failed: %w", err)
 		}
 
-		fmt.Printf("%s generated %s → %s\n",
+		fmt.Fprintf(deps.stdout, "%s generated %s → %s\n",
 			tui.StyleSuccess.Render("✓"),
 			tui.StyleTitle.Render(pkg.Name()),
 			tui.StyleDim.Render(outPath))
