@@ -20,6 +20,8 @@ the implementation.`,
 	}
 
 	root.AddCommand(newAddCmd())
+	root.AddCommand(newGenerateCmd())
+	root.AddCommand(newHashCmd())
 
 	return fang.Execute(ctx, root)
 }

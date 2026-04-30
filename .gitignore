@@ -4,3 +4,4 @@ fb
 
 # local Claude Code settings
 .claude/settings.local.json
+.DS_Store

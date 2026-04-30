@@ -14,6 +14,7 @@ import (
 	"buttress/internal/config"
 	"buttress/internal/generate"
 	"buttress/internal/github"
+	"buttress/internal/localconfig"
 	"buttress/internal/ref"
 	"buttress/internal/store"
 	"buttress/internal/tui"
@@ -158,22 +159,104 @@ func runAdd(ctx context.Context, rawRef, versionsURL string, doGenerate bool) er
 
 	// --- 7. Optionally generate ---
 	if doGenerate {
-		fmt.Fprintf(os.Stderr, "%s\n",
-			tui.StyleDim.Render(fmt.Sprintf("generating %s implementation…", cfg.Project.Language)))
+		wd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determining working directory: %w", err)
+		}
+		outPath, lang, err := resolveGenOutput(wd, pkg, cfg)
+		if err != nil {
+			return err
+		}
 
-		gen := generate.Stub{}
-		if err := gen.Generate(ctx, archive, cfg.Project.Language); err != nil {
-			if errors.Is(err, generate.ErrNotConfigured) {
-				return err
-			}
+		fmt.Fprintf(os.Stderr, "%s\n",
+			tui.StyleDim.Render(fmt.Sprintf("generating %s implementation → %s…", lang, outPath)))
+
+		gen := generate.NewLLMGenerator(generate.LLMConfig{
+			Provider: cfg.LLM.Provider,
+			BaseURL:  cfg.LLM.BaseURL,
+			APIKey:   cfg.LLM.APIKey,
+			Model:    cfg.LLM.Model,
+		})
+		req := generate.Request{
+			Spec:        archive,
+			Language:    lang,
+			OutputPath:  outPath,
+			PackageName: pkg.Name(),
+			ProjectDir:  wd,
+		}
+		if err := gen.Generate(ctx, req); err != nil {
 			return fmt.Errorf("generation failed: %w", err)
 		}
+
+		fmt.Printf("%s generated %s → %s\n",
+			tui.StyleSuccess.Render("✓"),
+			tui.StyleTitle.Render(pkg.Name()),
+			tui.StyleDim.Render(outPath))
 	}
 
 	return nil
 }
 
+// resolveGenOutput returns the output path and language for generation,
+// consulting .buttress.local.toml if present.
+func resolveGenOutput(projectDir string, pkg ref.PackageRef, cfg *config.Config) (outPath, lang string, err error) {
+	localCfg, err := localconfig.Load(projectDir)
+	if err != nil {
+		return "", "", err
+	}
+
+	lang = cfg.Project.Language
+	key := "@" + pkg.Org + "/" + pkg.Pkg
+	if override, ok := localCfg.Overrides[key]; ok {
+		if override.Language != "" {
+			lang = override.Language
+		}
+		if override.Output != "" {
+			outPath = filepath.Join(projectDir, override.Output)
+			return outPath, lang, nil
+		}
+	}
+
+	if lang == "" {
+		return "", "", fmt.Errorf("no language configured: set [project].language in ~/.config/buttress/config.toml or add a language override in .buttress.local.toml")
+	}
+	outPath = filepath.Join(projectDir, pkg.Pkg+"."+langExt(lang))
+	return outPath, lang, nil
+}
+
 // sanitize replaces characters that are unsafe in a filesystem path.
 func sanitize(s string) string {
 	return strings.NewReplacer(":", "-", "/", "-").Replace(s)
+}
+
+// langExt returns the conventional file extension for a language name.
+func langExt(lang string) string {
+	switch strings.ToLower(lang) {
+	case "go":
+		return "go"
+	case "typescript", "ts":
+		return "ts"
+	case "javascript", "js":
+		return "js"
+	case "python", "py":
+		return "py"
+	case "rust", "rs":
+		return "rs"
+	case "java":
+		return "java"
+	case "ruby", "rb":
+		return "rb"
+	case "c":
+		return "c"
+	case "cpp", "c++":
+		return "cpp"
+	case "csharp", "c#":
+		return "cs"
+	case "kotlin", "kt":
+		return "kt"
+	case "swift":
+		return "swift"
+	default:
+		return lang
+	}
 }
