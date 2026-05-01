@@ -1,5 +1,8 @@
 # Flying Buttress (`buttress`)
 
+[![CI](https://github.com/chrisbodhi/flying-buttress-cli/actions/workflows/ci.yml/badge.svg?branch=trunk)](https://github.com/chrisbodhi/flying-buttress-cli/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/chrisbodhi/flying-buttress-cli/trunk/.github/badges/coverage.json)](https://github.com/chrisbodhi/flying-buttress-cli/actions/workflows/ci.yml)
+
 Spec registry CLI for the agentic coding era. Download verified, SHA-pinned spec packages — docs, types, tests, and behavioral contracts — then generate the implementation locally with your LLM.
 
 The premise: generating software is now nearly free, and so is finding vulnerabilities in it. The traditional model of installing opaque third-party binaries is no longer tenable. Flying Buttress distributes specs, not implementations. You own the code.
