@@ -23,6 +23,7 @@ the implementation.`,
 	root.AddCommand(newAddCmd())
 	root.AddCommand(newGenerateCmd())
 	root.AddCommand(newHashCmd())
+	root.AddCommand(newListCmd())
 	return root
 }
 
