@@ -27,6 +27,9 @@ const defaultTimeout = 30 * time.Second
 // Client fetches spec data from GitHub.
 type Client struct {
 	http *http.Client
+	// archiveURL builds the URL for a spec archive. If nil, the conventional
+	// github.com URL is used. Tests may override this to point at a fake server.
+	archiveURL func(pkg ref.PackageRef, tagName string) string
 }
 
 // New returns a new Client with a sensible default timeout.
@@ -85,8 +88,13 @@ func (c *Client) FetchSpec(ctx context.Context, pkg ref.PackageRef, expectedHash
 	// the repo as "sha256-abc123". Convert at the point of URL construction;
 	// the canonical colon form is preserved everywhere else (VERSIONS.txt, lock).
 	tagName := strings.ReplaceAll(expectedHash, ":", "-")
-	fetchURL := fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
-		pkg.Org, pkg.Pkg, tagName)
+	var fetchURL string
+	if c.archiveURL != nil {
+		fetchURL = c.archiveURL(pkg, tagName)
+	} else {
+		fetchURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
+			pkg.Org, pkg.Pkg, tagName)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fetchURL, nil)
 	if err != nil {
