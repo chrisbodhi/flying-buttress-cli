@@ -21,6 +21,7 @@ the implementation.`,
 		SilenceUsage: true,
 	}
 	root.AddCommand(newAddCmd())
+	root.AddCommand(newConfigCmd())
 	root.AddCommand(newGenerateCmd())
 	root.AddCommand(newHashCmd())
 	root.AddCommand(newInitCmd())

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"buttress/internal/testutil"
 )
 
 // newTestStore returns a Store with cache and project directories under t.TempDir().
@@ -30,20 +32,6 @@ func newTestStore(t *testing.T) (*Store, string, string) {
 	return s, cache, proj
 }
 
-// writeTree creates a directory tree under root containing the given files.
-// files maps relative path → contents.
-func writeTree(t *testing.T, root string, files map[string]string) {
-	t.Helper()
-	for rel, body := range files {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
 
 // readTree returns a flat map of relative path → contents under root.
 func readTree(t *testing.T, root string) map[string]string {
@@ -158,7 +146,7 @@ func TestCommit_NewEntry(t *testing.T) {
 
 	src := t.TempDir()
 	src = filepath.Join(src, "extracted")
-	writeTree(t, src, map[string]string{
+	testutil.WriteTree(t, src, map[string]string{
 		"spec.md":             "# Hello\n",
 		"tests/example_test":  "test contents",
 		"sub/nested/file.txt": "nested\n",
@@ -209,7 +197,7 @@ func TestCommit_ExistingCacheReusesAndRemovesSrc(t *testing.T) {
 	}
 
 	src := filepath.Join(t.TempDir(), "extracted")
-	writeTree(t, src, map[string]string{"new.md": "new"})
+	testutil.WriteTree(t, src, map[string]string{"new.md": "new"})
 
 	if _, err := s.Commit("acme", "widget", "sha256:y", src); err != nil {
 		t.Fatalf("Commit() error: %v", err)
@@ -245,7 +233,7 @@ func TestCommit_OverwritesStaleProjectCopy(t *testing.T) {
 	}
 
 	src := filepath.Join(t.TempDir(), "extracted")
-	writeTree(t, src, map[string]string{"fresh.md": "new"})
+	testutil.WriteTree(t, src, map[string]string{"fresh.md": "new"})
 
 	if _, err := s.Commit("acme", "widget", "sha256:z", src); err != nil {
 		t.Fatalf("Commit() error: %v", err)
@@ -269,7 +257,7 @@ func TestCommit_HardLinksWhenPossible(t *testing.T) {
 	s, _, proj := newTestStore(t)
 
 	src := filepath.Join(t.TempDir(), "extracted")
-	writeTree(t, src, map[string]string{"spec.md": "hello"})
+	testutil.WriteTree(t, src, map[string]string{"spec.md": "hello"})
 
 	if _, err := s.Commit("acme", "widget", "sha256:hl", src); err != nil {
 		t.Fatalf("Commit() error: %v", err)
@@ -450,7 +438,7 @@ func TestCopyDir_PreservesContent(t *testing.T) {
 	t.Parallel()
 
 	src := filepath.Join(t.TempDir(), "src")
-	writeTree(t, src, map[string]string{
+	testutil.WriteTree(t, src, map[string]string{
 		"a.txt":     "alpha",
 		"sub/b.txt": "bravo",
 	})
@@ -526,7 +514,7 @@ func TestLinkDir_FallsBackToCopyAcrossFS(t *testing.T) {
 	t.Parallel()
 
 	src := filepath.Join(t.TempDir(), "src")
-	writeTree(t, src, map[string]string{"a.txt": "alpha"})
+	testutil.WriteTree(t, src, map[string]string{"a.txt": "alpha"})
 
 	dstRoot := t.TempDir()
 	dst := filepath.Join(dstRoot, "dst")

@@ -26,6 +26,7 @@ Flying Buttress is a spec registry CLI — it distributes docs, tests, specs, an
 - `internal/config/` — TOML config at `~/.config/buttress/config.toml`
 - `internal/generate/` — `Generator` interface + `Stub` (not yet implemented); `SpecArchive` struct
 - `internal/tui/` — lipgloss styles and bubbletea version picker
+- `internal/testutil/` — shared test helpers; `WriteTree(t, root, map[path]content)` for seeding temp directory trees
 
 **Content hash:** The hash in VERSIONS.txt (`sha256:abc123…`) doubles as the git tag name in the spec repo (colons replaced with hyphens for the tag, e.g. `sha256-abc123…`). It's computed by `extractTarGz` over file paths + contents in traversal order.
 
