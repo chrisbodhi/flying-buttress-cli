@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -95,6 +96,13 @@ func runGenerateCmd(ctx context.Context, rawRef string) error {
 		OutputPath:  outPath,
 		PackageName: pkg.Name(),
 		ProjectDir:  wd,
+		Progress: func(msg string) {
+				if strings.Contains(msg, "failed") {
+					fmt.Fprintf(os.Stderr, "%s %s\n", tui.StyleError.Render("✗"), tui.StyleDim.Render(msg))
+				} else {
+					fmt.Fprintf(os.Stderr, "%s\n", tui.StyleDim.Render(msg))
+				}
+			},
 	}
 	if err := gen.Generate(ctx, req); err != nil {
 		return fmt.Errorf("generation failed: %w", err)

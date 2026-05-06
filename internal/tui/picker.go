@@ -73,7 +73,7 @@ func (p *Picker) View() string {
 
 		if i == p.cursor {
 			c = cursor
-			sha = StyleSelected.Width(10).Render(ShortHash(v.Hash))
+			sha = StyleSelected.Width(shaWidth).Render(ShortHash(v.Hash))
 			desc = StyleSelected.Render(v.Description)
 		}
 

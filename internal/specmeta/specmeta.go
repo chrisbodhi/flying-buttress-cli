@@ -22,6 +22,7 @@ type Language struct {
 	Name           string       `toml:"name"`
 	Runtime        string       `toml:"runtime"`         // e.g. "bun", "node"
 	RuntimeMinimum string       `toml:"runtime_minimum"` // e.g. "1.3.13"
+	PackageManager string       `toml:"package_manager"` // e.g. "bun", "npm", "pnpm", "yarn"
 	Tests          []TestConfig `toml:"test"`
 }
 
@@ -68,4 +69,36 @@ func (m *SpecMeta) TestRunner(lang string) (runner, version string) {
 		return "", ""
 	}
 	return lc.Tests[0].Runner, lc.Tests[0].RunnerVersion
+}
+
+// PackageManagerFor returns the declared package manager for lang, defaulting
+// to "npm" when the field is absent.
+func (m *SpecMeta) PackageManagerFor(lang string) string {
+	lc := m.LanguageConfig(lang)
+	if lc == nil || lc.PackageManager == "" {
+		return "npm"
+	}
+	return strings.ToLower(lc.PackageManager)
+}
+
+// TestPackages returns the required packages for lang as "name@version" install
+// specs ready to pass directly to npm or bun. Entries without a version are
+// returned as bare names.
+func (m *SpecMeta) TestPackages(lang string) []string {
+	lc := m.LanguageConfig(lang)
+	if lc == nil || len(lc.Tests) == 0 {
+		return nil
+	}
+	var specs []string
+	for _, p := range lc.Tests[0].Packages {
+		if len(p) == 0 {
+			continue
+		}
+		s := p[0]
+		if len(p) > 1 && p[1] != "" {
+			s += "@" + p[1]
+		}
+		specs = append(specs, s)
+	}
+	return specs
 }

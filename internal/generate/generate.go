@@ -33,10 +33,17 @@ type SpecArchive struct {
 type Request struct {
 	Spec        *SpecArchive
 	Language    string
-	OutputPath  string // absolute path where the generated file should be written
-	PackageName string // "@org/pkg" — used in the prompt and progress output
-	ProjectDir  string // working directory for verification commands
-	MaxAttempts int    // 0 → default (3)
+	OutputPath  string          // absolute path where the generated file should be written
+	PackageName string          // "@org/pkg" — used in the prompt and progress output
+	ProjectDir  string          // working directory for verification commands
+	MaxAttempts int             // 0 → default (3)
+	Progress    func(msg string) // optional; called with status messages during generation
+}
+
+func (r *Request) progress(format string, args ...any) {
+	if r.Progress != nil {
+		r.Progress(fmt.Sprintf(format, args...))
+	}
 }
 
 // Generator generates implementation source files from a spec archive.
@@ -102,6 +109,7 @@ func (g *LLMGenerator) Generate(ctx context.Context, req Request) error {
 
 	var lastErrSections []string
 	for attempt := 1; attempt <= req.MaxAttempts; attempt++ {
+		req.progress("attempt %d/%d: calling LLM…", attempt, req.MaxAttempts)
 		code, err := g.chat(ctx, messages)
 		if err != nil {
 			return err
@@ -115,6 +123,7 @@ func (g *LLMGenerator) Generate(ctx context.Context, req Request) error {
 			return fmt.Errorf("writing generated file: %w", err)
 		}
 
+		req.progress("attempt %d/%d: verifying…", attempt, req.MaxAttempts)
 		errSections, err := verifyOutput(ctx, req, meta)
 		if err != nil {
 			return fmt.Errorf("running verification: %w", err)
@@ -125,6 +134,7 @@ func (g *LLMGenerator) Generate(ctx context.Context, req Request) error {
 
 		lastErrSections = errSections
 		if attempt < req.MaxAttempts {
+			req.progress("attempt %d/%d: verification failed, retrying…\n%s", attempt, req.MaxAttempts, strings.Join(errSections, "\n\n"))
 			// Append the failed attempt and the errors as a new conversation turn.
 			// The spec files remain in the system message — not re-sent.
 			messages = append(messages,

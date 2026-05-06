@@ -124,7 +124,7 @@ func TestWriteTempTSConfig(t *testing.T) {
 
 func TestWriteTempBunTSConfig(t *testing.T) {
 	t.Parallel()
-	path, cleanup, err := writeTempBunTSConfig("/abs/out.ts", "@org/pkg")
+	path, cleanup, err := writeTempBunTSConfig(t.TempDir(), "/abs/out.ts", "@org/pkg")
 	if err != nil {
 		t.Fatalf("writeTempBunTSConfig() error: %v", err)
 	}

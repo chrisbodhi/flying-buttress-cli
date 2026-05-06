@@ -23,7 +23,15 @@ func verifyTypeScript(ctx context.Context, req Request, meta *specmeta.SpecMeta)
 		return nil, err
 	}
 	if tscOut != "" {
+		if !looksLikeTSError(tscOut) {
+			req.progress("tsc environment error (not a code issue):\n%s", tscOut)
+			return nil, fmt.Errorf("tsc failed with a tooling error — check that TypeScript is available in this project:\n%s", tscOut)
+		}
 		sections = append(sections, "--- TypeScript compiler errors ---\n"+tscOut)
+	}
+
+	if err := installTestPackages(ctx, req, meta); err != nil {
+		return nil, err
 	}
 
 	testOut, err := runTSTests(ctx, req, meta)
@@ -37,6 +45,37 @@ func verifyTypeScript(ctx context.Context, req Request, meta *specmeta.SpecMeta)
 	return sections, nil
 }
 
+// installTestPackages installs the packages declared in buttress.toml for the
+// target language. Uses bun when the declared runner is bun, npm otherwise.
+func installTestPackages(ctx context.Context, req Request, meta *specmeta.SpecMeta) error {
+	pkgs := meta.TestPackages(req.Language)
+	if len(pkgs) == 0 {
+		return nil
+	}
+
+	req.progress("installing test packages: %s", strings.Join(pkgs, ", "))
+
+	var result *cmdResult
+	var err error
+	switch meta.PackageManagerFor(req.Language) {
+	case "bun":
+		result, err = runCmd(ctx, req.ProjectDir, "bun", append([]string{"add", "--dev"}, pkgs...)...)
+	case "pnpm":
+		result, err = runCmd(ctx, req.ProjectDir, "pnpm", append([]string{"add", "--save-dev"}, pkgs...)...)
+	case "yarn":
+		result, err = runCmd(ctx, req.ProjectDir, "yarn", append([]string{"add", "--dev"}, pkgs...)...)
+	default:
+		result, err = runCmd(ctx, req.ProjectDir, "npm", append([]string{"install", "--no-save"}, pkgs...)...)
+	}
+	if err != nil {
+		return fmt.Errorf("installing test packages: %w", err)
+	}
+	if result.exitCode != 0 {
+		return fmt.Errorf("installing test packages failed:\n%s", trimCmdOutput(result.output))
+	}
+	return nil
+}
+
 // runTSCheck type-checks outputPath using a temporary tsconfig. The compiler
 // follows imports from the output file, so the spec's type declarations are
 // reached via the relative import path already embedded in the generated code.
@@ -47,7 +86,9 @@ func runTSCheck(ctx context.Context, outputPath, projectDir string) (string, err
 	}
 	defer cleanup()
 
-	result, err := runCmd(ctx, projectDir, "npx", "--yes", "tsc", "--project", cfgPath)
+	// --package typescript pins npx to the typescript package's tsc binary,
+	// preventing it from picking up an unrelated tsc on PATH.
+	result, err := runCmd(ctx, projectDir, "npx", "--yes", "--package", "typescript", "tsc", "--project", cfgPath)
 	if err != nil {
 		return "", fmt.Errorf("running tsc: %w", err)
 	}
@@ -55,6 +96,13 @@ func runTSCheck(ctx context.Context, outputPath, projectDir string) (string, err
 		return trimCmdOutput(result.output), nil
 	}
 	return "", nil
+}
+
+// looksLikeTSError reports whether output contains at least one genuine
+// TypeScript diagnostic (error TS####). Output that lacks this is a tooling or
+// environment failure, not a code error, and should not be sent to the LLM.
+func looksLikeTSError(output string) bool {
+	return strings.Contains(output, "error TS")
 }
 
 // runTSTests runs the test runner declared in buttress.toml against the spec's
@@ -108,13 +156,13 @@ func runVitest(ctx context.Context, req Request, testsDir, version string) (stri
 // runBunTest runs the spec's test suite via bun test, injecting the generated
 // output file via a temporary tsconfig passed with --tsconfig-override.
 func runBunTest(ctx context.Context, req Request, testsDir string) (string, error) {
-	cfgPath, cleanup, err := writeTempBunTSConfig(req.OutputPath, req.PackageName)
+	cfgPath, cleanup, err := writeTempBunTSConfig(req.ProjectDir, req.OutputPath, req.PackageName)
 	if err != nil {
 		return "", fmt.Errorf("writing bun tsconfig: %w", err)
 	}
 	defer cleanup()
 
-	result, err := runCmd(ctx, req.ProjectDir, "bun", "--tsconfig-override", cfgPath, "test", testsDir)
+	result, err := runCmd(ctx, req.ProjectDir, "bun", "test", "--tsconfig-override", cfgPath, testsDir)
 	if err != nil {
 		return "", fmt.Errorf("running bun test: %w", err)
 	}
@@ -125,8 +173,10 @@ func runBunTest(ctx context.Context, req Request, testsDir string) (string, erro
 }
 
 // writeTempBunTSConfig writes a tsconfig whose only job is to alias pkgName
-// to outputPath via compilerOptions.paths, for use with bun --tsconfig-override.
-func writeTempBunTSConfig(outputPath, pkgName string) (path string, cleanup func(), err error) {
+// to outputPath via compilerOptions.paths, for use with bun test --tsconfig-override.
+// The file is written into the project directory, not the system temp dir, to avoid
+// a bun bug with /var/folders paths on macOS causing "directory mismatch" errors.
+func writeTempBunTSConfig(projectDir, outputPath, pkgName string) (path string, cleanup func(), err error) {
 	type compilerOptions struct {
 		Paths map[string][]string `json:"paths"`
 	}
@@ -144,7 +194,7 @@ func writeTempBunTSConfig(outputPath, pkgName string) (path string, cleanup func
 	if err != nil {
 		return "", nil, err
 	}
-	f, err := os.CreateTemp("", "buttress-bun-tsconfig-*.json")
+	f, err := os.CreateTemp(projectDir, "buttress-bun-tsconfig-*.json")
 	if err != nil {
 		return "", nil, err
 	}

@@ -40,6 +40,7 @@ description = "Pads a string."
 name = "typescript"
 runtime = "bun"
 runtime_minimum = "1.3.13"
+package_manager = "bun"
 
   [[language.test]]
   framework = "vitest"
@@ -91,6 +92,16 @@ runtime = "go"
 	runner, version := m.TestRunner("typescript")
 	if runner != "vitest" || version != "3.2.4" {
 		t.Errorf("TestRunner = (%q, %q), want (vitest, 3.2.4)", runner, version)
+	}
+
+	if pm := m.PackageManagerFor("typescript"); pm != "bun" {
+		t.Errorf("PackageManagerFor(typescript) = %q, want bun", pm)
+	}
+	if pm := m.PackageManagerFor("go"); pm != "npm" {
+		t.Errorf("PackageManagerFor(go) = %q, want npm (default)", pm)
+	}
+	if pm := m.PackageManagerFor("rust"); pm != "npm" {
+		t.Errorf("PackageManagerFor(rust) = %q, want npm (missing lang)", pm)
 	}
 }
 

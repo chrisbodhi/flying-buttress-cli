@@ -8,6 +8,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// shaWidth fits "sha256:" (7) + 8 hex chars from ShortHash.
+const shaWidth = 15
+
 var (
 	// Brand palette — stone cathedral, warm amber accent.
 	colorAccent  = lipgloss.Color("#C17D3C") // amber
@@ -34,7 +37,7 @@ var (
 
 	StyleSHA = lipgloss.NewStyle().
 			Foreground(colorAccent).
-			Width(10)
+			Width(shaWidth)
 
 	StyleDesc = lipgloss.NewStyle().
 			Foreground(colorSubtle)
