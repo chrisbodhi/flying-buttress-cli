@@ -33,10 +33,10 @@ type SpecArchive struct {
 type Request struct {
 	Spec        *SpecArchive
 	Language    string
-	OutputPath  string          // absolute path where the generated file should be written
-	PackageName string          // "@org/pkg" — used in the prompt and progress output
-	ProjectDir  string          // working directory for verification commands
-	MaxAttempts int             // 0 → default (3)
+	OutputPath  string           // absolute path where the generated file should be written
+	PackageName string           // "@org/pkg" — used in the prompt and progress output
+	ProjectDir  string           // working directory for verification commands
+	MaxAttempts int              // 0 → default (3)
 	Progress    func(msg string) // optional; called with status messages during generation
 }
 
