@@ -169,7 +169,16 @@ Pain points: internal library drift across teams; no standard way to enforce int
 
 ### Configuration and Local Overrides
 
-**12. `.buttress.local.toml` resolution** — NOT BUILT (config struct exists, resolution logic does not)
+**12. `buttress config`** — BUILT
+- Interactive huh-powered wizard that guides the user through LLM setup (local or frontier)
+- Pre-populates fields from any existing config; sending an empty line preserves the current value
+- `buttress config set <key> <value>` — updates a single dotted key without running the wizard
+- `buttress config get <key>` — prints a bare value suitable for piping to other tools
+- Supported keys: `llm.provider`, `llm.base_url`, `llm.api_key`, `llm.model`, `project.language`, `registry.cache_dir`
+- Config written to `~/.config/buttress/config.toml` (0600 permissions)
+- Priority: Must Have (blocks `buttress add --generate`)
+
+**14. `.buttress.local.toml` resolution** — NOT BUILT (config struct exists, resolution logic does not)
 - Walk from spec directory up to project root (identified by presence of `buttress.lock`), collecting all `.buttress.local.toml` files
 - Merge root-first, nearest-wins per key (cargo workspace semantics)
 - Fields: `package_manager`, per-package `output` path override, language override
@@ -177,7 +186,7 @@ Pain points: internal library drift across teams; no standard way to enforce int
 - Acceptance criteria: nearest `.buttress.local.toml` wins; walk stops at `buttress.lock` boundary; no `.buttress.local.toml` is not an error
 - Priority: Must Have (generation output path is unresolvable without this)
 
-**13. Authentication** — NOT BUILT
+**15. Authentication** — NOT BUILT
 - GitHub token support for private spec repos
 - Token read from config (`[registry].github_token`) or `BUTTRESS_GITHUB_TOKEN` environment variable
 - Passed as `Authorization: Bearer <token>` header on GitHub API and archive download requests

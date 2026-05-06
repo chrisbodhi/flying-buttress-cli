@@ -26,6 +26,11 @@ Flying Buttress is a spec registry CLI — it distributes docs, tests, specs, an
 - `internal/config/` — TOML config at `~/.config/buttress/config.toml`
 - `internal/generate/` — `Generator` interface + `Stub` (not yet implemented); `SpecArchive` struct
 - `internal/tui/` — lipgloss styles and bubbletea version picker
+- `internal/testutil/` — shared test helpers; `WriteTree(t, root, map[path]content)` for seeding temp directory trees
+
+**`buttress config` wizard:** uses `github.com/charmbracelet/huh` in accessible mode (`WithAccessible(true)`) for testability. Three sequential forms: type selection (local/frontier), credential fields, language. Pre-populates from existing config. `config set <key> <value>` and `config get <key>` bypass the wizard for scripting.
+
+**Testing huh forms:** use `io.Pipe` (not `strings.NewReader`) as the stdin source. Each huh field creates its own `bufio.Scanner`; `strings.NewReader` gets fully buffered by the first scanner, starving subsequent fields. With `io.Pipe`, each write blocks until the scanner reads it, so fields get lines one at a time.
 
 **Content hash:** The hash in VERSIONS.txt (`sha256:abc123…`) doubles as the git tag name in the spec repo (colons replaced with hyphens for the tag, e.g. `sha256-abc123…`). It's computed by `extractTarGz` over file paths + contents in traversal order.
 

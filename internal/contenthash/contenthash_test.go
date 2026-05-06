@@ -8,21 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"buttress/internal/testutil"
 )
 
-// writeTree creates files under root from a relative-path → contents map.
-func writeTree(t *testing.T, root string, files map[string]string) {
-	t.Helper()
-	for rel, body := range files {
-		full := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-}
 
 // expectedHash mirrors the algorithm in HashDirVerbose so tests can assert
 // the exact hash for a known set of files (in lexical order).
@@ -70,7 +59,7 @@ func TestHashDir_HashesOnlySpecDirs(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeTree(t, dir, map[string]string{
+	testutil.WriteTree(t, dir, map[string]string{
 		"human/spec.md":         "# Spec",
 		"machine/types.ts":      "export type X = {}",
 		"VERSIONS.txt":          "should be excluded",
@@ -101,7 +90,7 @@ func TestHashDir_StableAcrossRuns(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeTree(t, dir, map[string]string{
+	testutil.WriteTree(t, dir, map[string]string{
 		"human/a.md":   "alpha",
 		"human/b.md":   "bravo",
 		"machine/x.ts": "type X = number",
@@ -124,7 +113,7 @@ func TestHashDir_DiffersWhenContentChanges(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeTree(t, dir, map[string]string{"human/spec.md": "v1"})
+	testutil.WriteTree(t, dir, map[string]string{"human/spec.md": "v1"})
 	h1, err := HashDir(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -146,7 +135,7 @@ func TestHashDir_IgnoresPackagingFiles(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeTree(t, dir, map[string]string{"human/spec.md": "alpha"})
+	testutil.WriteTree(t, dir, map[string]string{"human/spec.md": "alpha"})
 	h1, err := HashDir(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -172,7 +161,7 @@ func TestHashDir_KnownValue(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeTree(t, dir, map[string]string{
+	testutil.WriteTree(t, dir, map[string]string{
 		"human/a.md":   "alpha",
 		"machine/x.ts": "beta",
 	})
@@ -197,7 +186,7 @@ func TestHashDir_MissingSpecDirsIsOK(t *testing.T) {
 
 	// Only human/ exists.
 	dir := t.TempDir()
-	writeTree(t, dir, map[string]string{"human/spec.md": "x"})
+	testutil.WriteTree(t, dir, map[string]string{"human/spec.md": "x"})
 	if _, err := HashDir(dir); err != nil {
 		t.Errorf("HashDir() error: %v", err)
 	}
@@ -229,7 +218,7 @@ func TestHashDir_MissingDir(t *testing.T) {
 func TestHashDir_OrderedLexically(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	writeTree(t, dir, map[string]string{
+	testutil.WriteTree(t, dir, map[string]string{
 		"human/c.md": "c",
 		"human/a.md": "a",
 		"human/b.md": "b",
@@ -254,7 +243,7 @@ func TestHashDir_UnreadableFile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	writeTree(t, dir, map[string]string{"human/spec.md": "x"})
+	testutil.WriteTree(t, dir, map[string]string{"human/spec.md": "x"})
 	if err := os.Chmod(filepath.Join(dir, "human", "spec.md"), 0o000); err != nil {
 		t.Fatal(err)
 	}
