@@ -6,10 +6,40 @@ import (
 	"testing"
 )
 
+// newTestDocker returns a dockerBackend wired to a fake binary name so tests
+// never invoke the real Docker daemon.
+func newTestDocker() *dockerBackend { return &dockerBackend{binary: "docker"} }
+
+// assertArgv calls buildArgv and fails the test if it returns an error or the
+// result does not match want.
+func assertArgv(t *testing.T, d *dockerBackend, spec Spec, want []string) {
+	t.Helper()
+	got, err := d.buildArgv(spec)
+	if err != nil {
+		t.Fatalf("buildArgv returned unexpected error: %v", err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("argv mismatch\n got: %q\nwant: %q", got, want)
+	}
+}
+
+// assertArgvErr calls buildArgv and fails the test if it succeeds or if the
+// error message does not contain wantSub.
+func assertArgvErr(t *testing.T, d *dockerBackend, spec Spec, wantSub string) {
+	t.Helper()
+	_, err := d.buildArgv(spec)
+	if err == nil {
+		t.Fatalf("buildArgv succeeded; expected error containing %q", wantSub)
+	}
+	if !strings.Contains(err.Error(), wantSub) {
+		t.Errorf("error %q does not contain %q", err.Error(), wantSub)
+	}
+}
+
 func TestDockerBuildArgv(t *testing.T) {
 	t.Parallel()
 
-	d := &dockerBackend{binary: "docker"}
+	d := newTestDocker()
 
 	tests := []struct {
 		name string
@@ -17,7 +47,7 @@ func TestDockerBuildArgv(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "minimal",
+			name: "minimal: image and command only",
 			spec: Spec{
 				Image:   "buttress-runner-node:20",
 				Command: []string{"node", "/work/gen.js"},
@@ -59,7 +89,7 @@ func TestDockerBuildArgv(t *testing.T) {
 			},
 		},
 		{
-			name: "test-execution phase: isolated network, no env",
+			name: "test-execution phase: named network, DisableDNS silently ignored",
 			spec: Spec{
 				Image:      "buttress-runner-node:20",
 				Command:    []string{"npm", "test"},
@@ -68,13 +98,13 @@ func TestDockerBuildArgv(t *testing.T) {
 					{HostPath: "/tmp/buttress-run-xyz", GuestPath: "/work"},
 				},
 				Network: Network{
-					Name: "buttress-offline",
-					// DisableDNS is silently ignored for Docker — no equivalent flag.
+					Name:       "buttress-offline",
 					DisableDNS: true,
 				},
 				ReadOnlyRootFS:      true,
 				DropAllCapabilities: true,
 			},
+			// --no-dns must NOT appear; Docker has no such flag.
 			want: []string{
 				"run", "--rm",
 				"-w", "/work",
@@ -84,6 +114,35 @@ func TestDockerBuildArgv(t *testing.T) {
 				"-v", "/tmp/buttress-run-xyz:/work",
 				"buttress-runner-node:20",
 				"npm", "test",
+			},
+		},
+		{
+			// Regression: DisableDNS alone (no network name) must not emit any
+			// network flag. Docker has no --no-dns equivalent.
+			name: "DisableDNS without network name emits no network flags",
+			spec: Spec{
+				Image:   "img",
+				Command: []string{"sh"},
+				Network: Network{DisableDNS: true},
+			},
+			want: []string{
+				"run", "--rm",
+				"img",
+				"sh",
+			},
+		},
+		{
+			name: "named network without DisableDNS emits only --network",
+			spec: Spec{
+				Image:   "img",
+				Command: []string{"sh"},
+				Network: Network{Name: "my-net"},
+			},
+			want: []string{
+				"run", "--rm",
+				"--network", "my-net",
+				"img",
+				"sh",
 			},
 		},
 		{
@@ -107,7 +166,20 @@ func TestDockerBuildArgv(t *testing.T) {
 			},
 		},
 		{
-			name: "multiple mounts preserves order",
+			name: "empty env map emits no -e flags",
+			spec: Spec{
+				Image:   "img",
+				Command: []string{"sh"},
+				Env:     map[string]string{},
+			},
+			want: []string{
+				"run", "--rm",
+				"img",
+				"sh",
+			},
+		},
+		{
+			name: "multiple mounts preserves declaration order",
 			spec: Spec{
 				Image:   "img",
 				Command: []string{"sh"},
@@ -126,18 +198,42 @@ func TestDockerBuildArgv(t *testing.T) {
 				"sh",
 			},
 		},
+		{
+			name: "multi-word command passed through verbatim",
+			spec: Spec{
+				Image:   "img",
+				Command: []string{"go", "test", "-race", "-count=1", "./..."},
+			},
+			want: []string{
+				"run", "--rm",
+				"img",
+				"go", "test", "-race", "-count=1", "./...",
+			},
+		},
+		{
+			// All hardening flags together with no optional fields: confirms
+			// that ReadOnlyRootFS and DropAllCapabilities are independent.
+			name: "hardened: read-only rootfs and drop-all-caps without mounts or env",
+			spec: Spec{
+				Image:               "img",
+				Command:             []string{"sh"},
+				ReadOnlyRootFS:      true,
+				DropAllCapabilities: true,
+			},
+			want: []string{
+				"run", "--rm",
+				"--read-only",
+				"--cap-drop", "ALL",
+				"img",
+				"sh",
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got, err := d.buildArgv(tt.spec)
-			if err != nil {
-				t.Fatalf("buildArgv: %v", err)
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("argv mismatch\n got: %q\nwant: %q", got, tt.want)
-			}
+			assertArgv(t, d, tt.spec, tt.want)
 		})
 	}
 }
@@ -145,7 +241,7 @@ func TestDockerBuildArgv(t *testing.T) {
 func TestDockerBuildArgvRejectsInvalidSpec(t *testing.T) {
 	t.Parallel()
 
-	d := &dockerBackend{binary: "docker"}
+	d := newTestDocker()
 
 	tests := []struct {
 		name      string
@@ -181,7 +277,8 @@ func TestDockerBuildArgvRejectsInvalidSpec(t *testing.T) {
 			wantError: "GuestPath must be absolute",
 		},
 		{
-			name: "colon in host path",
+			// Colon in -v would be parsed as the path separator by Docker.
+			name: "colon in host path would corrupt -v syntax",
 			spec: Spec{
 				Image:   "img",
 				Command: []string{"sh"},
@@ -190,13 +287,41 @@ func TestDockerBuildArgvRejectsInvalidSpec(t *testing.T) {
 			wantError: "may not contain ':' or ','",
 		},
 		{
-			name: "env key with =",
+			// Comma in guest path is also ambiguous in extended -v syntax.
+			name: "comma in guest path would corrupt -v syntax",
+			spec: Spec{
+				Image:   "img",
+				Command: []string{"sh"},
+				Mounts:  []Mount{{HostPath: "/ok", GuestPath: "/has,comma"}},
+			},
+			wantError: "may not contain ':' or ','",
+		},
+		{
+			name: "env key with = would break -e KEY=VALUE encoding",
 			spec: Spec{
 				Image:   "img",
 				Command: []string{"sh"},
 				Env:     map[string]string{"BAD=KEY": "v"},
 			},
 			wantError: "env key",
+		},
+		{
+			name: "empty env key is invalid",
+			spec: Spec{
+				Image:   "img",
+				Command: []string{"sh"},
+				Env:     map[string]string{"": "v"},
+			},
+			wantError: "env key",
+		},
+		{
+			name: "NUL byte in env value would truncate the variable inside the container",
+			spec: Spec{
+				Image:   "img",
+				Command: []string{"sh"},
+				Env:     map[string]string{"KEY": "val\x00ue"},
+			},
+			wantError: "NUL byte",
 		},
 		{
 			name: "relative working directory",
@@ -212,13 +337,31 @@ func TestDockerBuildArgvRejectsInvalidSpec(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := d.buildArgv(tt.spec)
-			if err == nil {
-				t.Fatalf("expected error containing %q, got nil", tt.wantError)
-			}
-			if !strings.Contains(err.Error(), tt.wantError) {
-				t.Errorf("error %q does not contain %q", err.Error(), tt.wantError)
-			}
+			assertArgvErr(t, d, tt.spec, tt.wantError)
 		})
+	}
+}
+
+// TestDockerBuildArgvNeverEmitsNoDNS confirms that --no-dns never appears in
+// any Docker argv, regardless of how Network.DisableDNS is set.
+func TestDockerBuildArgvNeverEmitsNoDNS(t *testing.T) {
+	t.Parallel()
+
+	d := newTestDocker()
+	cases := []Spec{
+		{Image: "img", Command: []string{"sh"}, Network: Network{DisableDNS: true}},
+		{Image: "img", Command: []string{"sh"}, Network: Network{Name: "net", DisableDNS: true}},
+		{Image: "img", Command: []string{"sh"}, Network: Network{Name: "net", DisableDNS: false}},
+	}
+	for _, spec := range cases {
+		argv, err := d.buildArgv(spec)
+		if err != nil {
+			t.Fatalf("buildArgv: %v", err)
+		}
+		for _, arg := range argv {
+			if arg == "--no-dns" {
+				t.Errorf("--no-dns appeared in Docker argv %q (Docker has no such flag)", argv)
+			}
+		}
 	}
 }
