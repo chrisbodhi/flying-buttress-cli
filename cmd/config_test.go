@@ -97,11 +97,11 @@ func TestRunConfig_LocalLLM_WritesBaseURLNoAPIKey(t *testing.T) {
 	t.Parallel()
 
 	deps, savedPath, _ := newConfigFixture(t, []string{
-		"1",                       // local
-		"ollama",                  // provider
-		"http://localhost:11434",  // base_url
-		"llama3",                  // model
-		"go",                      // language
+		"1",                      // local
+		"ollama",                 // provider
+		"http://localhost:11434", // base_url
+		"llama3",                 // model
+		"go",                     // language
 	})
 
 	if err := runConfig(deps); err != nil {
@@ -152,11 +152,11 @@ func TestRunConfig_Frontier_WritesAPIKeyNoBaseURL(t *testing.T) {
 	t.Parallel()
 
 	deps, savedPath, _ := newConfigFixture(t, []string{
-		"2",        // frontier
-		"openai",   // provider
+		"2",         // frontier
+		"openai",    // provider
 		"sk-abc123", // api_key
-		"gpt-4o",   // model
-		"python",   // language
+		"gpt-4o",    // model
+		"python",    // language
 	})
 
 	if err := runConfig(deps); err != nil {
@@ -192,11 +192,11 @@ func TestRunConfig_ExistingConfig_PreservesValuesOnEmptyInput(t *testing.T) {
 	t.Parallel()
 
 	deps, savedPath, _ := newConfigFixture(t, []string{
-		"",  // keep existing type (local = option 1, default)
-		"",  // keep provider
-		"",  // keep base_url
-		"",  // keep model
-		"",  // keep language
+		"", // keep existing type (local = option 1, default)
+		"", // keep provider
+		"", // keep base_url
+		"", // keep model
+		"", // keep language
 	})
 	seedConfig(t, *savedPath, `
 [llm]
@@ -305,11 +305,11 @@ func TestRunConfig_BothModels_FrontierThenLocal(t *testing.T) {
 	}
 
 	deps2, _, _ := newConfigFixture(t, []string{
-		"1",                      // local
-		"lmstudio",               // provider
-		"http://localhost:1234",  // base_url
-		"mistral",                // model
-		"go",                     // language
+		"1",                     // local
+		"lmstudio",              // provider
+		"http://localhost:1234", // base_url
+		"mistral",               // model
+		"go",                    // language
 	})
 	deps2.configPath = func() (string, error) { return *savedPath, nil }
 

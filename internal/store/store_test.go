@@ -32,7 +32,6 @@ func newTestStore(t *testing.T) (*Store, string, string) {
 	return s, cache, proj
 }
 
-
 // readTree returns a flat map of relative path → contents under root.
 func readTree(t *testing.T, root string) map[string]string {
 	t.Helper()

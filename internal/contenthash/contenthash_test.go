@@ -12,7 +12,6 @@ import (
 	"buttress/internal/testutil"
 )
 
-
 // expectedHash mirrors the algorithm in HashDirVerbose so tests can assert
 // the exact hash for a known set of files (in lexical order).
 func expectedHash(orderedFiles []struct{ Rel, Body string }) string {
