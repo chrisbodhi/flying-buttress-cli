@@ -2,5 +2,10 @@
 buttress
 fb
 
+# coverage output
+coverage.out
+coverage.html
+
 # local Claude Code settings
 .claude/settings.local.json
+.DS_Store

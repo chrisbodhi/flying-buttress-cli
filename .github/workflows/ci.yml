@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [trunk]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Verify gofmt
+        run: make fmt-check
+
+      - name: Vet
+        run: make vet
+
+      - name: Test (with race detector)
+        run: make test-race
+
+      - name: Coverage
+        run: make test-cover
+
+      - name: Render HTML coverage report
+        run: go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage profile
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            coverage.out
+            coverage.html
+
+      - name: Compute coverage badge
+        id: badge
+        run: |
+          pct=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$3); print $3}')
+          if [ -z "$pct" ]; then
+            echo "could not extract coverage percentage" >&2
+            exit 1
+          fi
+          # Whole-number color thresholds.
+          int=${pct%.*}
+          if   [ "$int" -ge 90 ]; then color=brightgreen
+          elif [ "$int" -ge 80 ]; then color=green
+          elif [ "$int" -ge 70 ]; then color=yellowgreen
+          elif [ "$int" -ge 60 ]; then color=yellow
+          elif [ "$int" -ge 50 ]; then color=orange
+          else                         color=red
+          fi
+          mkdir -p .github/badges
+          cat > .github/badges/coverage.json <<JSON
+          {
+            "schemaVersion": 1,
+            "label": "coverage",
+            "message": "${pct}%",
+            "color": "${color}"
+          }
+          JSON
+          echo "pct=${pct}" >> "$GITHUB_OUTPUT"
+          echo "color=${color}" >> "$GITHUB_OUTPUT"
+
+      - name: Job summary
+        run: |
+          {
+            echo "## Coverage"
+            echo
+            echo "**Total: ${{ steps.badge.outputs.pct }}%** (${{ steps.badge.outputs.color }})"
+            echo
+            echo "Per-package breakdown:"
+            echo '```'
+            go tool cover -func=coverage.out | tail -20
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit updated badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/trunk'
+        run: |
+          if git diff --quiet .github/badges/coverage.json; then
+            echo "coverage badge unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/coverage.json
+          git commit -m "Update coverage badge to ${{ steps.badge.outputs.pct }}% [skip ci]"
+          git push

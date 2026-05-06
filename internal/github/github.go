@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"buttress/internal/contenthash"
 	"buttress/internal/generate"
 	"buttress/internal/ref"
 	"buttress/internal/versions"
@@ -26,6 +27,9 @@ const defaultTimeout = 30 * time.Second
 // Client fetches spec data from GitHub.
 type Client struct {
 	http *http.Client
+	// archiveURL builds the URL for a spec archive. If nil, the conventional
+	// github.com URL is used. Tests may override this to point at a fake server.
+	archiveURL func(pkg ref.PackageRef, tagName string) string
 }
 
 // New returns a new Client with a sensible default timeout.
@@ -84,8 +88,13 @@ func (c *Client) FetchSpec(ctx context.Context, pkg ref.PackageRef, expectedHash
 	// the repo as "sha256-abc123". Convert at the point of URL construction;
 	// the canonical colon form is preserved everywhere else (VERSIONS.txt, lock).
 	tagName := strings.ReplaceAll(expectedHash, ":", "-")
-	fetchURL := fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
-		pkg.Org, pkg.Pkg, tagName)
+	var fetchURL string
+	if c.archiveURL != nil {
+		fetchURL = c.archiveURL(pkg, tagName)
+	} else {
+		fetchURL = fmt.Sprintf("https://github.com/%s/%s/archive/refs/tags/%s.tar.gz",
+			pkg.Org, pkg.Pkg, tagName)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fetchURL, nil)
 	if err != nil {
@@ -109,7 +118,7 @@ func (c *Client) FetchSpec(ctx context.Context, pkg ref.PackageRef, expectedHash
 		return nil, fmt.Errorf("creating destination %s: %w", destDir, err)
 	}
 
-	computedHash, err := extractTarGz(resp.Body, destDir)
+	computedHash, hashedFiles, err := extractTarGz(resp.Body, destDir)
 	if err != nil {
 		_ = os.RemoveAll(destDir)
 		return nil, fmt.Errorf("extracting spec archive: %w", err)
@@ -119,8 +128,11 @@ func (c *Client) FetchSpec(ctx context.Context, pkg ref.PackageRef, expectedHash
 	fullComputed := "sha256:" + computedHash
 	if fullComputed != expectedHash {
 		_ = os.RemoveAll(destDir)
-		return nil, fmt.Errorf("content hash mismatch for %s:\n  expected: %s\n  got:      %s",
-			pkg.Name(), expectedHash, fullComputed)
+		return nil, fmt.Errorf(
+			"content hash mismatch for %s:\n  expected: %s\n  got:      %s\n\nfiles hashed from tarball:\n  %s",
+			pkg.Name(), expectedHash, fullComputed,
+			strings.Join(hashedFiles, "\n  "),
+		)
 	}
 
 	return &generate.SpecArchive{
@@ -131,10 +143,10 @@ func (c *Client) FetchSpec(ctx context.Context, pkg ref.PackageRef, expectedHash
 
 // extractTarGz extracts a .tar.gz stream into dir and returns a SHA-256
 // content hash computed over all file contents in sorted path order.
-func extractTarGz(r io.Reader, dir string) (string, error) {
+func extractTarGz(r io.Reader, dir string) (hash string, hashedFiles []string, err error) {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
-		return "", fmt.Errorf("opening gzip stream: %w", err)
+		return "", nil, fmt.Errorf("opening gzip stream: %w", err)
 	}
 	defer gz.Close()
 
@@ -151,12 +163,19 @@ func extractTarGz(r io.Reader, dir string) (string, error) {
 			break
 		}
 		if err != nil {
-			return "", fmt.Errorf("reading tar entry: %w", err)
+			return "", nil, fmt.Errorf("reading tar entry: %w", err)
+		}
+
+		// Skip PAX extended header entries — they appear before the real entries
+		// and must not influence the strip prefix or be extracted as files.
+		if hdr.Typeflag == tar.TypeXGlobalHeader || hdr.Typeflag == tar.TypeXHeader {
+			continue
 		}
 
 		// Determine the strip prefix from the first entry.
+		// TrimRight handles tarballs where the top-level dir entry omits the trailing slash.
 		if stripPrefix == "" {
-			parts := strings.SplitN(filepath.ToSlash(hdr.Name), "/", 2)
+			parts := strings.SplitN(strings.TrimRight(filepath.ToSlash(hdr.Name), "/"), "/", 2)
 			if len(parts) > 0 {
 				stripPrefix = parts[0] + "/"
 			}
@@ -169,28 +188,52 @@ func extractTarGz(r io.Reader, dir string) (string, error) {
 
 		dest := filepath.Join(dir, filepath.FromSlash(relPath))
 
+		if !contenthash.Included(relPath) {
+			// Still extract the file; just don't include it in the hash.
+			switch hdr.Typeflag {
+			case tar.TypeDir:
+				if err := os.MkdirAll(dest, 0o755); err != nil {
+					return "", nil, err
+				}
+			case tar.TypeReg:
+				if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+					return "", nil, err
+				}
+				f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, hdr.FileInfo().Mode())
+				if err != nil {
+					return "", nil, err
+				}
+				_, copyErr := io.Copy(f, tr)
+				f.Close()
+				if copyErr != nil {
+					return "", nil, copyErr
+				}
+			}
+			continue
+		}
+
 		switch hdr.Typeflag {
 		case tar.TypeDir:
 			if err := os.MkdirAll(dest, 0o755); err != nil {
-				return "", err
+				return "", nil, err
 			}
 		case tar.TypeReg:
 			if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
-				return "", err
+				return "", nil, err
 			}
 			f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, hdr.FileInfo().Mode())
 			if err != nil {
-				return "", err
+				return "", nil, err
 			}
-			// Write to file and hash simultaneously.
-			fmt.Fprintf(hasher, "%s\n", relPath) // include path in hash
+			hashedFiles = append(hashedFiles, relPath)
+			fmt.Fprintf(hasher, "%s\n", relPath)
 			if _, err := io.Copy(io.MultiWriter(f, hasher), tr); err != nil {
 				f.Close()
-				return "", err
+				return "", nil, err
 			}
 			f.Close()
 		}
 	}
 
-	return hex.EncodeToString(hasher.Sum(nil)), nil
+	return hex.EncodeToString(hasher.Sum(nil)), hashedFiles, nil
 }
