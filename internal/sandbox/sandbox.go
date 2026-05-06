@@ -7,10 +7,9 @@
 // paths to expose, which environment variables to inject, and which network
 // (if any) to attach to, and the sandbox runs it.
 //
-// The only implementation today is Apple's `container` CLI on macOS, which
-// runs each container in its own Linux microVM via the Virtualization
-// framework. On other platforms, Detect returns ErrUnavailable and callers
-// must decide whether to refuse to run or to fall back to an in-process path.
+// Two backends are provided: Apple's `container` CLI (macOS-only, preferred
+// when available) and Docker (any platform). Detect tries them in that order
+// and returns ErrUnavailable only when neither is found.
 package sandbox
 
 import (
@@ -68,9 +67,13 @@ type Sandbox interface {
 }
 
 // Detect returns the best sandbox available on this host, or ErrUnavailable.
+// Apple's container runtime is preferred; Docker is the fallback.
 func Detect() (Sandbox, error) {
 	if c, err := newAppleContainer(); err == nil {
 		return c, nil
+	}
+	if d, err := newDockerBackend(); err == nil {
+		return d, nil
 	}
 	return nil, ErrUnavailable
 }
