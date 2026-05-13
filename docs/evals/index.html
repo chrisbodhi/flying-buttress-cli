@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluating Flying Buttress Output — Three Approaches</title>
+<meta name="description" content="Three candidate approaches for evaluating LLM-generated implementations produced by the Flying Buttress CLI.">
+<style>
+  :root {
+    --ink: #1c1814;
+    --ink-soft: #4a4138;
+    --stone: #f5f1ea;
+    --stone-dark: #e6dfd2;
+    --mortar: #b9aa92;
+    --accent: #7a3e2a;
+    --accent-soft: #c8927a;
+    --rule: #d3c7b1;
+    --code-bg: #2b2620;
+    --code-ink: #f5f1ea;
+    --good: #3f6a3a;
+    --warn: #a06820;
+    --weak: #8b3e3e;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--stone);
+    color: var(--ink);
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-size: 17px;
+    line-height: 1.6;
+  }
+  header.hero {
+    background: linear-gradient(180deg, var(--stone-dark) 0%, var(--stone) 100%);
+    border-bottom: 1px solid var(--rule);
+    padding: 4rem 1.5rem 3rem;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 1.5rem; }
+  .eyebrow {
+    font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    font-size: 0.72rem;
+    color: var(--accent);
+    margin: 0 0 1rem;
+  }
+  h1 {
+    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    font-weight: 600;
+    font-size: clamp(2rem, 4.5vw, 3.25rem);
+    line-height: 1.1;
+    margin: 0 0 1rem;
+    letter-spacing: -0.01em;
+  }
+  h1 em { font-style: italic; color: var(--accent); }
+  header.hero p.lede {
+    font-size: 1.2rem;
+    max-width: 56ch;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+  nav.toc {
+    margin-top: 2.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  nav.toc a {
+    color: var(--ink-soft);
+    text-decoration: none;
+    border-bottom: 1px dotted var(--mortar);
+    padding-bottom: 2px;
+  }
+  nav.toc a:hover { color: var(--accent); border-color: var(--accent); }
+  main { padding: 3rem 0 5rem; }
+  section { margin: 0 auto 4rem; }
+  h2 {
+    font-size: 1.85rem;
+    margin: 0 0 0.4rem;
+    letter-spacing: -0.005em;
+  }
+  h2 .num {
+    display: inline-block;
+    font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    color: var(--accent);
+    background: var(--stone-dark);
+    border: 1px solid var(--rule);
+    padding: 2px 8px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 0.75rem;
+    position: relative;
+    top: -3px;
+  }
+  h3 {
+    font-size: 1.1rem;
+    margin: 1.75rem 0 0.5rem;
+    color: var(--ink);
+  }
+  p { margin: 0 0 1rem; }
+  .approach {
+    background: #fffdf8;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    padding: 2rem 2.25rem;
+    box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 6px 18px -10px rgba(60,40,20,0.18);
+  }
+  .approach + .approach { margin-top: 2.5rem; }
+  .tagline {
+    color: var(--ink-soft);
+    font-style: italic;
+    margin: 0.25rem 0 1.5rem;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem 2rem;
+    margin-top: 1rem;
+  }
+  @media (max-width: 640px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .approach { padding: 1.5rem; }
+    header.hero { padding: 2.5rem 1rem 2rem; }
+  }
+  .grid-2 h3 { margin-top: 0; }
+  ul, ol { padding-left: 1.2rem; margin: 0.25rem 0 1rem; }
+  li { margin-bottom: 0.35rem; }
+  .knobs {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 4px;
+    padding: 1rem 1.25rem;
+    font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    overflow-x: auto;
+    margin: 0.5rem 0 1.25rem;
+  }
+  .knobs .k { color: var(--accent-soft); }
+  .knobs .v { color: #d8d2c4; }
+  .knobs .c { color: #7a716a; }
+  code {
+    font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    background: var(--stone-dark);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+  .matrix {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1.5rem;
+    font-size: 0.95rem;
+  }
+  .matrix th, .matrix td {
+    border: 1px solid var(--rule);
+    padding: 0.6rem 0.85rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  .matrix th {
+    background: var(--stone-dark);
+    font-weight: 600;
+    font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .matrix tr:nth-child(even) td { background: #fbf8f2; }
+  .pill {
+    display: inline-block;
+    font-family: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid currentColor;
+  }
+  .pill.good { color: var(--good); }
+  .pill.warn { color: var(--warn); }
+  .pill.weak { color: var(--weak); }
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: #fbf6ec;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    font-size: 0.97rem;
+  }
+  .callout strong { color: var(--accent); }
+  footer {
+    border-top: 1px solid var(--rule);
+    padding: 2rem 1.5rem 3rem;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+  }
+  footer .wrap { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem; }
+  .ornament {
+    text-align: center;
+    color: var(--mortar);
+    font-size: 1.4rem;
+    letter-spacing: 0.4em;
+    margin: 3rem 0 0;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <p class="eyebrow">Flying Buttress · Eval Design Note</p>
+    <h1>Three approaches to <em>evaluating</em> spec‑generated code.</h1>
+    <p class="lede">
+      Buttress generates implementations from SHA‑pinned specs via an LLM
+      <code>generate → verify → fix</code> loop. To pick a model, set a
+      temperature, and tune retry budgets, we need evals. Below are three
+      approaches we can run today — from cheap and deterministic to
+      qualitative and expensive.
+    </p>
+    <nav class="toc" aria-label="Sections">
+      <a href="#context">Context</a>
+      <a href="#a1">1 · Spec‑Test Pass Rate</a>
+      <a href="#a2">2 · Golden Comparison</a>
+      <a href="#a3">3 · LLM‑as‑Judge</a>
+      <a href="#matrix">Comparison</a>
+      <a href="#recommendation">Recommendation</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section id="context" class="wrap">
+    <h2>What we are evaluating</h2>
+    <p>
+      Each <code>buttress add @org/pkg --generate</code> call produces a single
+      source file written to disk and then verified
+      (<code>tsc</code> + the spec's declared test runner, today only for
+      TypeScript). The unit of evaluation is therefore <em>(spec, language,
+      model, temperature, max_attempts) → output file</em>. Every approach
+      below scores that output along a different axis.
+    </p>
+    <div class="callout">
+      <strong>Knobs to sweep.</strong> Model family (e.g. <code>gpt-4o-mini</code>,
+      <code>claude-sonnet-4-6</code>, <code>claude-opus-4-7</code>, a local
+      Ollama model), temperature (<code>0.0 / 0.2 / 0.7</code>),
+      <code>MaxAttempts</code> (<code>1 / 3 / 5</code>), and prompt variants
+      (with/without test files in the system message). The chat request in
+      <code>internal/generate/generate.go</code> does not currently set
+      <code>temperature</code> — wiring that into <code>LLMConfig</code> is a
+      prerequisite for any of these evals.
+    </div>
+  </section>
+
+  <section id="a1" class="wrap">
+    <div class="approach">
+      <h2><span class="num">01</span>Spec‑Test Pass Rate</h2>
+      <p class="tagline">Black‑box, automated, fully deterministic. The eval the verify loop already implies.</p>
+
+      <p>
+        Reuse the verification step the CLI <em>already runs</em> as the eval
+        harness. For every <code>(spec, model, temperature)</code> cell, run
+        <code>generate</code> N times (e.g. 10 seeds), record per‑attempt
+        outcomes, and aggregate into a single pass‑rate.
+      </p>
+
+      <div class="grid-2">
+        <div>
+          <h3>What we measure</h3>
+          <ul>
+            <li><strong>pass@1</strong>: % of seeds passing on first attempt.</li>
+            <li><strong>pass@k</strong>: % passing within <code>MaxAttempts</code>.</li>
+            <li><strong>Attempts to green</strong>, conditional on passing.</li>
+            <li><strong>Wall‑clock</strong> and <strong>token cost</strong> per success.</li>
+            <li><strong>Stability</strong>: variance of pass@1 across seeds.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Why it fits Buttress</h3>
+          <ul>
+            <li>The spec format already requires tests — eval data is free.</li>
+            <li>No human labelling, no judge LLM, no rubric drift.</li>
+            <li>Surfaces feedback‑loop quality, not just one‑shot quality.</li>
+            <li>Detects regressions when we change prompts or upgrade models.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Recommended knob settings</h3>
+      <div class="knobs">
+<span class="c"># Run each cell with N=10 seeds; vary temperature per cell.</span>
+<span class="k">temperature</span> = <span class="v">0.0</span>  <span class="c"># primary — measures the model's "best guess"</span>
+<span class="k">temperature</span> = <span class="v">0.7</span>  <span class="c"># secondary — measures pass@k headroom with diversity</span>
+<span class="k">max_attempts</span> = <span class="v">3</span>    <span class="c"># the product default</span>
+<span class="k">models</span>      = <span class="v">[gpt-4o-mini, sonnet-4-6, opus-4-7, qwen2.5-coder:7b]</span>
+<span class="k">specs</span>       = <span class="v">curated set of ~30 specs spanning small/medium/large</span>
+      </div>
+
+      <p>
+        Higher temperatures help <code>pass@k</code> by giving the fix loop
+        a different draft to react to, but hurt <code>pass@1</code>. Reporting
+        both makes the tradeoff legible.
+      </p>
+
+      <p><strong>Risks &amp; mitigations.</strong> Flaky tests pollute scores —
+      mark and quarantine any spec whose pass@1 standard deviation across
+      seeds exceeds a threshold. Tooling errors (missing
+      <code>tsc</code>, network installs) must be detected and excluded; the
+      verifier already distinguishes these from real compile errors.</p>
+    </div>
+  </section>
+
+  <section id="a2" class="wrap">
+    <div class="approach">
+      <h2><span class="num">02</span>Golden Implementation Comparison</h2>
+      <p class="tagline">Reference‑based, structural. Cheap to re‑run on every commit.</p>
+
+      <p>
+        For each spec, hand‑author or hand‑audit a <em>golden</em>
+        implementation per supported language. Score generated outputs against
+        the golden along several structural dimensions, independent of
+        whether tests pass.
+      </p>
+
+      <div class="grid-2">
+        <div>
+          <h3>What we measure</h3>
+          <ul>
+            <li><strong>Public API match</strong>: same exported names,
+              signatures, parameter shapes (parsed from AST).</li>
+            <li><strong>Surface size</strong>: LOC ratio vs. golden — flags
+              hallucinated helpers and dead code.</li>
+            <li><strong>Cyclomatic complexity</strong> per exported symbol.</li>
+            <li><strong>Normalised diff distance</strong> after stripping
+              comments and renaming locals.</li>
+            <li><strong>Dependency footprint</strong>: are unexpected packages
+              imported?</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Why it fits Buttress</h3>
+          <ul>
+            <li>Catches "tests pass but the implementation is a 400‑line
+              monstrosity" failure modes that approach 1 misses.</li>
+            <li>Cheap and deterministic — no LLM call to grade.</li>
+            <li>Doubles as a regression watchdog when prompts change shape.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Recommended knob settings</h3>
+      <div class="knobs">
+<span class="k">temperature</span>   = <span class="v">0.0 → 0.5</span>  <span class="c"># sweep; higher temps drift further from golden</span>
+<span class="k">judge</span>         = <span class="v">deterministic AST tools (tree-sitter, ts-morph)</span>
+<span class="k">aggregation</span>   = <span class="v">weighted score; API match weighted 2×</span>
+<span class="k">acceptance</span>    = <span class="v">≥ 0.85 weighted score = "shaped like the golden"</span>
+      </div>
+
+      <p><strong>Caveats.</strong> Goldens are opinions, not ground truth — a
+      shorter, more idiomatic generation can score lower than a verbose copy of
+      the golden. Use this as a <em>shape filter</em>, not a leaderboard.
+      Maintaining goldens for every spec across multiple languages is the real
+      cost; bootstrap by accepting a high‑confidence generation and editing it
+      down.</p>
+    </div>
+  </section>
+
+  <section id="a3" class="wrap">
+    <div class="approach">
+      <h2><span class="num">03</span>LLM‑as‑Judge with Rubric</h2>
+      <p class="tagline">Qualitative, multi‑dimensional. Captures what tests and ASTs can't.</p>
+
+      <p>
+        Have a stronger model grade outputs from each cell against a fixed
+        rubric. Use pairwise comparisons (A vs B) more than absolute scores —
+        they're more reliable, and they convert into Elo or Bradley‑Terry
+        rankings that survive rubric drift between runs.
+      </p>
+
+      <div class="grid-2">
+        <div>
+          <h3>Rubric dimensions</h3>
+          <ul>
+            <li><strong>Correctness</strong>: does the code do what the spec
+              says, beyond what the tests cover?</li>
+            <li><strong>Idiomaticness</strong>: does it look like code a
+              senior in this language would write?</li>
+            <li><strong>Readability</strong>: naming, structure, comments.</li>
+            <li><strong>Error handling</strong>: edge cases the tests miss.</li>
+            <li><strong>Minimalism</strong>: no speculative abstractions.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Why it fits Buttress</h3>
+          <ul>
+            <li>Users will ultimately read this code — taste matters.</li>
+            <li>Surfaces hallucinations and over‑engineering that pass tests.</li>
+            <li>Cross‑family pairwise judging exposes whether a cheap model is
+              "good enough" for routine specs.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Recommended knob settings</h3>
+      <div class="knobs">
+<span class="k">judge_model</span>      = <span class="v">claude-opus-4-7</span>      <span class="c"># strongest available; grader ≠ generator</span>
+<span class="k">judge_temperature</span> = <span class="v">0.0</span>                  <span class="c"># grader must be deterministic</span>
+<span class="k">gen_temperature</span>   = <span class="v">[0.0, 0.3, 0.7]</span>      <span class="c"># the variable we're studying</span>
+<span class="k">protocol</span>          = <span class="v">pairwise, blinded, randomised A/B order</span>
+<span class="k">ranking</span>           = <span class="v">Bradley-Terry over ~200 comparisons per cell</span>
+      </div>
+
+      <p><strong>Known biases.</strong> Judges prefer their own family (the
+      "self‑preference" effect), prefer longer responses, and prefer the first
+      option presented. Mitigate by (a) blinding language/model markers,
+      (b) randomising A/B order, (c) running a second judge from a different
+      family on a 10% sample to check for divergence, (d) excluding the
+      generator's own family from judging its outputs.</p>
+    </div>
+  </section>
+
+  <section id="matrix" class="wrap">
+    <h2>How they compare</h2>
+    <table class="matrix">
+      <thead>
+        <tr>
+          <th>Dimension</th>
+          <th>① Spec‑Test</th>
+          <th>② Golden</th>
+          <th>③ LLM‑Judge</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Signal type</td>
+          <td>Functional correctness</td>
+          <td>Structural conformance</td>
+          <td>Qualitative judgment</td>
+        </tr>
+        <tr>
+          <td>Determinism</td>
+          <td><span class="pill good">High</span> at T=0</td>
+          <td><span class="pill good">High</span></td>
+          <td><span class="pill warn">Medium</span></td>
+        </tr>
+        <tr>
+          <td>Cost per cell</td>
+          <td><span class="pill good">$</span> generation only</td>
+          <td><span class="pill good">$</span> generation only</td>
+          <td><span class="pill weak">$$$</span> + judge tokens</td>
+        </tr>
+        <tr>
+          <td>Setup effort</td>
+          <td><span class="pill good">Low</span> reuses verify</td>
+          <td><span class="pill warn">High</span> goldens per spec/lang</td>
+          <td><span class="pill warn">Medium</span> rubric + harness</td>
+        </tr>
+        <tr>
+          <td>Detects "passes tests, ugly code"</td>
+          <td><span class="pill weak">No</span></td>
+          <td><span class="pill good">Yes</span></td>
+          <td><span class="pill good">Yes</span></td>
+        </tr>
+        <tr>
+          <td>Detects "looks great, doesn't work"</td>
+          <td><span class="pill good">Yes</span></td>
+          <td><span class="pill weak">No</span></td>
+          <td><span class="pill warn">Sometimes</span></td>
+        </tr>
+        <tr>
+          <td>Sensitive to temperature</td>
+          <td>pass@1 falls, pass@k rises</td>
+          <td>Drift increases with T</td>
+          <td>Variance increases with T</td>
+        </tr>
+        <tr>
+          <td>Cross‑model comparable</td>
+          <td><span class="pill good">Directly</span></td>
+          <td><span class="pill good">Directly</span></td>
+          <td>Via pairwise Elo</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="recommendation" class="wrap">
+    <h2>Recommendation</h2>
+    <p>
+      Run all three, but stagger them: <strong>① Spec‑Test as the daily gate
+      on every prompt or model change</strong>; <strong>② Golden as a weekly
+      shape check</strong> on a smaller curated set; <strong>③ LLM‑Judge as a
+      quarterly leaderboard refresh</strong> when picking the default model or
+      negotiating with a new provider. Each one fails in a way the others
+      catch, and only ① is cheap enough to run on every PR.
+    </p>
+    <p>
+      Concrete first step: add <code>Temperature</code> to <code>LLMConfig</code>
+      and plumb it through <code>chatRequest</code> in
+      <code>internal/generate/generate.go</code>, then stand up approach ① as a
+      <code>go test</code>‑shaped harness under <code>internal/evals/</code>
+      with the existing TypeScript verifier.
+    </p>
+    <p class="ornament">‡ · ‡ · ‡</p>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Flying Buttress · eval design note</span>
+    <span>buttress/docs/evals</span>
+  </div>
+</footer>
+
+</body>
+</html>
