@@ -83,11 +83,11 @@ A spec repo contains:
 ```
 buttress.toml    ← package manifest
 VERSIONS.txt     ← version history (alternating SHA / description lines, newest first)
-docs/
-tests/
-types/
-spec/
+human/           ← prose specs, docs, behavioral contracts (Markdown)
+machine/         ← types, tests, schemas — anything the LLM consumes verbatim
 ```
+
+Only files under `human/` and `machine/` contribute to the content hash. Everything else (`buttress.toml`, `VERSIONS.txt`, README, tooling config) is packaging and is ignored by the hasher — this keeps the hash stable and avoids the circular dependency of hashing files that reference the hash.
 
 `VERSIONS.txt` format — no blank lines between entries, most recent first:
 
