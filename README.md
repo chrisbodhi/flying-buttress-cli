@@ -45,6 +45,20 @@ buttress config
 # Set or get a single config value without the wizard
 buttress config set llm.model gpt-4o
 buttress config get llm.model
+
+# Initialize a consumer project (creates an empty buttress.lock)
+buttress init
+
+# Scaffold a new spec package (interactive wizard for spec authors)
+buttress init --spec
+
+# List installed spec packages
+buttress list
+buttress list --json
+
+# Compute the content hash of a spec directory (for spec authors)
+buttress hash .
+buttress hash --verbose .
 ```
 
 When no hash is provided, an interactive picker shows available versions pulled from the spec repo's `VERSIONS.txt`.
@@ -126,7 +140,9 @@ Initial spec and tests.
 | `buttress add --generate` | Working |
 | `buttress config` | Working |
 | `buttress generate` | Working |
-| `buttress list` | Planned |
+| `buttress hash` | Working |
+| `buttress init` | Working |
+| `buttress list` | Working |
 | `buttress remove` | Planned |
 | `buttress update` | Planned |
 | `buttress verify` | Planned |
