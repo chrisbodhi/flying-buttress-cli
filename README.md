@@ -44,7 +44,7 @@ When no hash is provided, an interactive picker shows available versions pulled 
 
 ## Configuration
 
-`~/.config/buttress/config.toml` — created manually, never committed.
+`~/.config/buttress/config.toml` — created and updated by `buttress config`, never committed.
 
 ```toml
 [llm]

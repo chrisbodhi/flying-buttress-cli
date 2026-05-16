@@ -33,7 +33,7 @@ Flying Buttress is a spec registry CLI — it distributes docs, tests, specs, an
 - `internal/tui/` — lipgloss styles and bubbletea version picker
 - `internal/testutil/` — shared test helpers; `WriteTree(t, root, map[path]content)` for seeding temp directory trees
 
-**`buttress config` wizard:** uses `github.com/charmbracelet/huh` in accessible mode (`WithAccessible(true)`) for testability. Three sequential forms: type selection (local/frontier), credential fields, language. Pre-populates from existing config. `config set <key> <value>` and `config get <key>` bypass the wizard for scripting.
+**`buttress config` wizard:** uses `github.com/charmbracelet/huh` in accessible mode (`WithAccessible(true)`) for testability. Three sequential forms: type selection (local/frontier), credential fields, language. Pre-populates from existing config. Writes `~/.config/buttress/config.toml` (creating the directory if needed) via `writeConfig` in `cmd/config.go`. `config set <key> <value>` and `config get <key>` bypass the wizard for scripting; `config set` also writes the file.
 
 **Testing huh forms:** use `io.Pipe` (not `strings.NewReader`) as the stdin source. Each huh field creates its own `bufio.Scanner`; `strings.NewReader` gets fully buffered by the first scanner, starving subsequent fields. With `io.Pipe`, each write blocks until the scanner reads it, so fields get lines one at a time.
 
