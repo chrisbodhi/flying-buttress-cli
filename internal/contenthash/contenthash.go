@@ -18,6 +18,11 @@ import (
 	"strings"
 )
 
+// HashPrefix is the prefix used in all content hashes (e.g. "sha256:abc123…").
+// Git tag names cannot contain colons, so the tag form replaces ":" with "-";
+// the canonical colon form is used everywhere else (VERSIONS.txt, lock file).
+const HashPrefix = "sha256:"
+
 // specDirs are the only directories whose contents are included in the
 // content hash. Everything else is packaging or tooling — not spec.
 var specDirs = []string{"human/", "machine/"}
@@ -80,5 +85,5 @@ func HashDirVerbose(dir string) (hash string, included []string, err error) {
 		}
 	}
 
-	return "sha256:" + hex.EncodeToString(hasher.Sum(nil)), included, nil
+	return HashPrefix + hex.EncodeToString(hasher.Sum(nil)), included, nil
 }

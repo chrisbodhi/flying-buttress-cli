@@ -61,7 +61,7 @@ func TestBuildSystemPrompt_Comprehensive(t *testing.T) {
 	if idxTypes < 0 || idxSpec < 0 || idxInstr < 0 {
 		t.Fatalf("missing expected sections: types=%d spec=%d instr=%d", idxTypes, idxSpec, idxInstr)
 	}
-	if !(idxTypes < idxSpec && idxSpec < idxInstr) {
+	if idxTypes >= idxSpec || idxSpec >= idxInstr {
 		t.Errorf("section order wrong: types=%d spec=%d instr=%d", idxTypes, idxSpec, idxInstr)
 	}
 
@@ -184,5 +184,96 @@ func TestAppendSection_EmptyDirIsSilent(t *testing.T) {
 	}
 	if sb.Len() != 0 {
 		t.Errorf("appendSection wrote content for empty dir: %q", sb.String())
+	}
+}
+
+func TestCollectTextFiles_UnreadableFile(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root can read any file; permission test skipped")
+	}
+	dir := t.TempDir()
+	// "a.md" is readable; "b.md" is not. Walk order is lexical so "a.md"
+	// is collected first, then "b.md" fails, leaving files=[a] err=permission.
+	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("visible"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unreadable := filepath.Join(dir, "b.md")
+	if err := os.WriteFile(unreadable, []byte("secret"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o644) })
+
+	files, err := collectTextFiles(dir)
+	if err == nil {
+		t.Fatal("expected error reading unreadable file")
+	}
+	// The readable file was collected before the error.
+	if len(files) == 0 {
+		t.Log("no files collected before the error (acceptable but won't cover appendSection error path)")
+	}
+}
+
+func TestAppendSection_CollectError(t *testing.T) {
+	// appendSection must propagate a non-NotExist, non-empty-files error from
+	// collectTextFiles. We achieve this by having one readable file (so
+	// len(files) > 0) and one unreadable file (so err != nil).
+	if os.Getuid() == 0 {
+		t.Skip("root can read any file; permission test skipped")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "a.md"), []byte("ok"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unreadable := filepath.Join(dir, "b.md")
+	if err := os.WriteFile(unreadable, []byte("secret"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o644) })
+
+	var sb strings.Builder
+	err := appendSection(&sb, dir, "HEADING")
+	if err == nil {
+		t.Fatal("expected error from appendSection when collectTextFiles partially fails")
+	}
+}
+
+func TestBuildSystemPrompt_ImportHintPrefixedWithDotSlash(t *testing.T) {
+	t.Parallel()
+	// When outputPath is in the spec directory itself, filepath.Rel returns
+	// "machine" (no leading dot), which the code must prepend "./" to.
+	specDir := writePromptSpec(t, map[string]string{
+		"machine/types.ts": "export type Y = string;",
+	})
+	req := Request{
+		Spec:        &SpecArchive{Dir: specDir},
+		Language:    "typescript",
+		PackageName: "@org/pkg",
+		// OutputPath is inside specDir so filepath.Rel(specDir, machine) = "machine"
+		OutputPath: filepath.Join(specDir, "out.ts"),
+	}
+	prompt, err := buildSystemPrompt(req, &specmeta.SpecMeta{})
+	if err != nil {
+		t.Fatalf("buildSystemPrompt() error: %v", err)
+	}
+	// The import hint must use "./" prefix.
+	if !strings.Contains(prompt, "./machine") {
+		t.Errorf("prompt missing './machine' import hint, got:\n%s", prompt)
+	}
+}
+
+func TestAppendSection_WritesContentWhenFilesPresent(t *testing.T) {
+	t.Parallel()
+	dir := writePromptSpec(t, map[string]string{
+		"spec.md": "# Hello",
+	})
+	var sb strings.Builder
+	if err := appendSection(&sb, dir, "MY HEADING"); err != nil {
+		t.Fatalf("appendSection() error: %v", err)
+	}
+	if !strings.Contains(sb.String(), "MY HEADING") {
+		t.Errorf("output missing heading: %q", sb.String())
+	}
+	if !strings.Contains(sb.String(), "# Hello") {
+		t.Errorf("output missing file content: %q", sb.String())
 	}
 }

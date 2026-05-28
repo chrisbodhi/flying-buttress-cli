@@ -62,7 +62,7 @@ func (c *Client) ListVersionsFromURL(ctx context.Context, url string) ([]version
 		return nil, fmt.Errorf("reading version list from %s: %w", url, err)
 	}
 
-	vs, err := versions.Parse(string(body))
+	vs, err := versions.ParseVersionsFile(string(body))
 	if err != nil {
 		return nil, fmt.Errorf("parsing version list from %s: %w", url, err)
 	}
@@ -125,7 +125,7 @@ func (c *Client) FetchSpec(ctx context.Context, pkg ref.PackageRef, expectedHash
 	}
 
 	// Verify integrity: computed hash must match the one from VERSIONS.txt.
-	fullComputed := "sha256:" + computedHash
+	fullComputed := contenthash.HashPrefix + computedHash
 	if fullComputed != expectedHash {
 		_ = os.RemoveAll(destDir)
 		return nil, fmt.Errorf(

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestParse(t *testing.T) {
+func TestParseVersionsFile(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -88,22 +88,22 @@ func TestParse(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := Parse(tt.input)
+			got, err := ParseVersionsFile(tt.input)
 			if tt.wantErr != "" {
 				if err == nil {
-					t.Fatalf("Parse() = %+v, want error containing %q", got, tt.wantErr)
+					t.Fatalf("ParseVersionsFile() = %+v, want error containing %q", got, tt.wantErr)
 				}
 				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("Parse() error = %q, want substring %q", err, tt.wantErr)
+					t.Fatalf("ParseVersionsFile() error = %q, want substring %q", err, tt.wantErr)
 				}
 				return
 			}
 
 			if err != nil {
-				t.Fatalf("Parse() unexpected error: %v", err)
+				t.Fatalf("ParseVersionsFile() unexpected error: %v", err)
 			}
 			if !versionsEqual(got, tt.want) {
-				t.Errorf("Parse() = %+v, want %+v", got, tt.want)
+				t.Errorf("ParseVersionsFile() = %+v, want %+v", got, tt.want)
 			}
 		})
 	}
@@ -115,9 +115,9 @@ func TestParse_OrderPreserved(t *testing.T) {
 	t.Parallel()
 
 	in := "v3\nthird\nv2\nsecond\nv1\nfirst\n"
-	got, err := Parse(in)
+	got, err := ParseVersionsFile(in)
 	if err != nil {
-		t.Fatalf("Parse() error: %v", err)
+		t.Fatalf("ParseVersionsFile() error: %v", err)
 	}
 
 	wantOrder := []string{"v3", "v2", "v1"}
@@ -136,7 +136,7 @@ func TestParse_OrderPreserved(t *testing.T) {
 func TestParse_ScannerError(t *testing.T) {
 	t.Parallel()
 	huge := strings.Repeat("a", 100*1024)
-	_, err := Parse(huge + "\n")
+	_, err := ParseVersionsFile(huge + "\n")
 	if err == nil {
 		t.Fatal("expected scanner error for oversized line")
 	}

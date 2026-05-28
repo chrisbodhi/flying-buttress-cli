@@ -140,6 +140,55 @@ func TestRunHash_NotADirectory(t *testing.T) {
 	}
 }
 
+func TestHashCmd_ExplicitArg(t *testing.T) {
+	// Covers the `dir = args[0]` branch in the cobra RunE.
+	// Not parallel: captureStdoutStderr swaps os.Stdout globally.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "human"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "human", "f.md"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c := newHashCmd()
+	c.SetArgs([]string{dir})
+	stdout, _, err := captureStdoutStderr(t, func() error {
+		return c.Execute()
+	})
+	if err != nil {
+		t.Fatalf("Execute(%q) error: %v", dir, err)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(stdout), "sha256:") {
+		t.Errorf("stdout = %q, want sha256: prefix", stdout)
+	}
+}
+
+func TestRunHash_HashingError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("root can read all files; permission test skipped")
+	}
+	// Make a human/ subdir with an unreadable file to force a hash error.
+	dir := t.TempDir()
+	humanDir := filepath.Join(dir, "human")
+	if err := os.MkdirAll(humanDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	unreadable := filepath.Join(humanDir, "secret.md")
+	if err := os.WriteFile(unreadable, []byte("secret"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(unreadable, 0o644) })
+
+	err := runHash(dir, false)
+	if err == nil {
+		t.Fatal("expected error when hashing fails")
+	}
+	if !strings.Contains(err.Error(), "hashing") {
+		t.Errorf("error = %q, want substring 'hashing'", err)
+	}
+}
+
 func TestHashCmd_DefaultsToCurrentDir(t *testing.T) {
 	// Invoking the command with no positional args defaults to ".". The runner
 	// should at least try to stat "." successfully (cwd is always a dir).

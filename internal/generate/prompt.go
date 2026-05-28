@@ -16,11 +16,11 @@ import (
 func buildSystemPrompt(req Request, _ *specmeta.SpecMeta) (string, error) {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf(
+	fmt.Fprintf(&sb,
 		"You are generating a %s implementation for the spec package %q.\n"+
 			"Output file: %s\n\n",
 		req.Language, req.PackageName, req.OutputPath,
-	))
+	)
 
 	// Tell the LLM the relative import path to the machine/ directory.
 	machineDir := filepath.Join(req.Spec.Dir, "machine")
@@ -31,7 +31,7 @@ func buildSystemPrompt(req Request, _ *specmeta.SpecMeta) (string, error) {
 			if !strings.HasPrefix(rel, ".") {
 				rel = "./" + rel
 			}
-			sb.WriteString(fmt.Sprintf("Import types using: import type { ... } from %q\n\n", rel))
+			fmt.Fprintf(&sb, "Import types using: import type { ... } from %q\n\n", rel)
 		}
 	}
 
@@ -46,7 +46,7 @@ func buildSystemPrompt(req Request, _ *specmeta.SpecMeta) (string, error) {
 	}
 
 	sb.WriteString("=== INSTRUCTIONS ===\n")
-	sb.WriteString(fmt.Sprintf(
+	fmt.Fprintf(&sb,
 		"Generate a single %s file that implements the spec above.\n"+
 			"Requirements:\n"+
 			"  1. Use the exact types declared in TYPE DEFINITIONS\n"+
@@ -54,7 +54,7 @@ func buildSystemPrompt(req Request, _ *specmeta.SpecMeta) (string, error) {
 			"  3. No TypeScript compiler errors (strict mode)\n"+
 			"Output ONLY the implementation code. No code fences, no explanations.\n",
 		req.Language,
-	))
+	)
 
 	return sb.String(), nil
 }
@@ -81,10 +81,10 @@ func appendSection(sb *strings.Builder, dir, heading string) error {
 	if err != nil {
 		return err
 	}
-	sb.WriteString(fmt.Sprintf("=== %s ===\n\n", heading))
+	fmt.Fprintf(sb, "=== %s ===\n\n", heading)
 	for _, f := range files {
 		rel, _ := filepath.Rel(dir, f.path)
-		sb.WriteString(fmt.Sprintf("--- %s ---\n%s\n\n", filepath.ToSlash(rel), f.content))
+		fmt.Fprintf(sb, "--- %s ---\n%s\n\n", filepath.ToSlash(rel), f.content)
 	}
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -250,7 +251,136 @@ func TestRenderList_HashFormats(t *testing.T) {
 	}
 }
 
-func TestRenderList_Deterministic(t *testing.T) {
+// ---------------------------------------------------------------------------
+// runList integration tests
+// ---------------------------------------------------------------------------
+
+func TestRunList_EmptyLock(t *testing.T) {
+	// Not parallel: mutates HOME and cwd.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	projDir := t.TempDir()
+	origWd, _ := os.Getwd()
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	// No buttress.lock → ReadLock returns empty map.
+	if err := runList(false); err != nil {
+		t.Fatalf("runList(false) error: %v", err)
+	}
+}
+
+func TestRunList_JSONFlag(t *testing.T) {
+	// Not parallel: mutates HOME and cwd.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	projDir := t.TempDir()
+	// Seed a non-empty lock file so JSON output is non-trivial.
+	lockPath := filepath.Join(projDir, "buttress.lock")
+	if err := os.WriteFile(lockPath, []byte(`{"@a/b":{"org":"a","pkg":"b","hash":"sha256:abc","installed_at":"2026-01-01T00:00:00Z"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origWd, _ := os.Getwd()
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	if err := runList(true); err != nil {
+		t.Fatalf("runList(true) error: %v", err)
+	}
+}
+
+func TestRunList_LoadConfigError(t *testing.T) {
+	// Not parallel: mutates HOME.
+	// Make HOME point at a file (not a directory) so os.UserHomeDir() works but
+	// config.Load() will fail to read the config file when the config dir is unreadable.
+	// Easiest: point HOME at a temp dir but put a file where the config dir would be.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Create .config/buttress as a file (not dir) so config.DefaultPath resolution fails to stat.
+	configBase := filepath.Join(tmpHome, ".config")
+	if err := os.MkdirAll(configBase, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Make config.toml a directory so TOML parsing fails with a non-NotExist error.
+	cfgDir := filepath.Join(configBase, "buttress")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Write an invalid TOML file.
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte("not toml = = bad"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := runList(false); err == nil {
+		t.Fatal("expected error from runList when config is invalid")
+	}
+}
+
+func TestRunList_HumanOutput(t *testing.T) {
+	// Not parallel: mutates HOME and cwd.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	projDir := t.TempDir()
+	lockPath := filepath.Join(projDir, "buttress.lock")
+	if err := os.WriteFile(lockPath, []byte(`{"@org/pkg":{"org":"org","pkg":"pkg","hash":"sha256:abc123","installed_at":"2026-01-01T00:00:00Z"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origWd, _ := os.Getwd()
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	if err := runList(false); err != nil {
+		t.Fatalf("runList(false) error: %v", err)
+	}
+}
+
+func TestRunList_NewListCmd_Metadata(t *testing.T) {
+	t.Parallel()
+	cmd := newListCmd()
+	if !strings.HasPrefix(cmd.Use, "list") {
+		t.Errorf("Use = %q, want prefix 'list'", cmd.Use)
+	}
+	if cmd.Short == "" {
+		t.Error("Short is empty")
+	}
+}
+
+func TestNewListCmd_Execute(t *testing.T) {
+	// Execute newListCmd via cobra to cover the RunE closure body.
+	// Not parallel: mutates HOME and cwd.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	projDir := t.TempDir()
+	origWd, _ := os.Getwd()
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	cmd := newListCmd()
+	cmd.SetArgs([]string{})
+	var out strings.Builder
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("newListCmd.Execute() error: %v", err)
+	}
+}
+
+func TestRunList_Deterministic(t *testing.T) {
 	// Map iteration is randomized; renderList must produce byte-identical
 	// output across invocations for the same input.
 	lock := map[string]store.LockEntry{

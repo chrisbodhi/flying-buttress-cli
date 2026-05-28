@@ -45,7 +45,7 @@ func runGenerateCmd(ctx context.Context, rawRef string) error {
 		return errors.New("generate requires LLM credentials in ~/.config/buttress/config.toml")
 	}
 
-	pkg, err := ref.Parse(rawRef)
+	pkg, err := ref.ParsePackageRef(rawRef)
 	if err != nil {
 		return err
 	}

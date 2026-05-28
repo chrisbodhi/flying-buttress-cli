@@ -33,10 +33,10 @@ type VersionLister interface {
 	ListVersions(ctx context.Context, pkg ref.PackageRef) ([]Version, error)
 }
 
-// Parse parses the plain-text version list format from r.
+// ParseVersionsFile parses the plain-text version list format from r.
 // Lines are consumed in pairs: (gitref, description).
 // Blank lines and lines beginning with # are ignored.
-func Parse(text string) ([]Version, error) {
+func ParseVersionsFile(text string) ([]Version, error) {
 	var versions []Version
 	scanner := bufio.NewScanner(strings.NewReader(text))
 

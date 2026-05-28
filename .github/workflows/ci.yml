@@ -22,6 +22,11 @@ jobs:
       - name: Verify gofmt
         run: make fmt-check
 
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
       - name: Vet
         run: make vet
 
@@ -29,7 +34,13 @@ jobs:
         run: make test-race
 
       - name: Coverage
-        run: make test-cover
+        run: |
+          make test-cover
+          go test -cover ./... | tee coverage.txt
+          awk '/^ok.*coverage:/ {
+            pct = $(NF-2); sub(/%$/, "", pct)
+            if (pct + 0 < 80.0) { print "FAIL " $2 " coverage " pct "% < 80%"; failed=1 }
+          } END { exit failed+0 }' coverage.txt
 
       - name: Render HTML coverage report
         run: go tool cover -html=coverage.out -o coverage.html

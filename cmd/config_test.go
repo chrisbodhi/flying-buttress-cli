@@ -522,3 +522,164 @@ func TestRunConfigGet_MissingConfigReturnsEmpty(t *testing.T) {
 		t.Errorf("stdout = %q, want empty line for unset value", stdout.String())
 	}
 }
+
+// ---------------------------------------------------------------------------
+// writeConfig error paths
+// ---------------------------------------------------------------------------
+
+func TestWriteConfig_CreatesDirectoryAndFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sub", "buttress", "config.toml")
+	cfg := &config.Config{}
+	cfg.LLM.Provider = "ollama"
+
+	if err := writeConfig(path, cfg); err != nil {
+		t.Fatalf("writeConfig() error: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("config file not created: %v", err)
+	}
+}
+
+func TestWriteConfig_FailsWhenDirIsFile(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	// Create a regular file where the config directory would go.
+	notADir := filepath.Join(dir, "notadir")
+	if err := os.WriteFile(notADir, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(notADir, "config.toml")
+	cfg := &config.Config{}
+
+	err := writeConfig(path, cfg)
+	if err == nil {
+		t.Fatal("expected error when parent path is a file")
+	}
+	if !strings.Contains(err.Error(), "creating config dir") {
+		t.Errorf("error = %q, want 'creating config dir'", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// runConfigSet remaining keys
+// ---------------------------------------------------------------------------
+
+func TestRunConfigSet_AllKeys(t *testing.T) {
+	t.Parallel()
+
+	keys := []struct {
+		key   string
+		value string
+	}{
+		{"llm.base_url", "http://localhost:1234"},
+		{"llm.model", "llama3"},
+		{"project.language", "rust"},
+		{"registry.cache_dir", "/tmp/mycache"},
+	}
+
+	for _, tt := range keys {
+		tt := tt
+		t.Run(tt.key, func(t *testing.T) {
+			t.Parallel()
+			deps, savedPath, _ := newConfigFixture(t, nil)
+			seedConfig(t, *savedPath, "")
+
+			if err := runConfigSet(deps, tt.key, tt.value); err != nil {
+				t.Fatalf("runConfigSet(%q, %q) error: %v", tt.key, tt.value, err)
+			}
+			// Verify the value was actually written via runConfigGet.
+			deps2, _, stdout := newConfigFixture(t, nil)
+			deps2.configPath = func() (string, error) { return *savedPath, nil }
+			if err := runConfigGet(deps2, tt.key); err != nil {
+				t.Fatalf("runConfigGet(%q) error: %v", tt.key, err)
+			}
+			if strings.TrimSpace(stdout.String()) != tt.value {
+				t.Errorf("runConfigGet(%q) = %q, want %q", tt.key, strings.TrimSpace(stdout.String()), tt.value)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// defaultConfigDeps
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// cobra RunE closures — exercises defaultConfigDeps path
+// ---------------------------------------------------------------------------
+
+func TestConfigCmd_SetRunE(t *testing.T) {
+	// Execute the cobra config set subcommand end-to-end via cobra.Execute.
+	// This covers the RunE body that calls defaultConfigDeps() + runConfigSet().
+	// Not parallel: mutates HOME.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	// Pre-create the config dir so DefaultPath works.
+	cfgDir := filepath.Join(tmpHome, ".config", "buttress")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := newConfigCmd()
+	cmd.SetArgs([]string{"set", "llm.model", "llama3"})
+	var out strings.Builder
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("config set Execute() error: %v", err)
+	}
+}
+
+func TestConfigCmd_GetRunE(t *testing.T) {
+	// Covers the config get RunE body.
+	// Not parallel: mutates HOME.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	cfgDir := filepath.Join(tmpHome, ".config", "buttress")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.toml"),
+		[]byte("[llm]\nmodel = \"llama3\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := newConfigCmd()
+	cmd.SetArgs([]string{"get", "llm.model"})
+	var out strings.Builder
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("config get Execute() error: %v", err)
+	}
+}
+
+func TestDefaultConfigDeps_NotNil(t *testing.T) {
+	t.Parallel()
+	deps := defaultConfigDeps()
+	if deps == nil {
+		t.Fatal("defaultConfigDeps() returned nil")
+	}
+	if deps.stdin == nil {
+		t.Error("stdin is nil")
+	}
+	if deps.stdout == nil {
+		t.Error("stdout is nil")
+	}
+	if deps.configPath == nil {
+		t.Error("configPath is nil")
+	}
+	// configPath must return a valid path without error.
+	path, err := deps.configPath()
+	if err != nil {
+		t.Errorf("configPath() error: %v", err)
+	}
+	if path == "" {
+		t.Error("configPath() returned empty string")
+	}
+}

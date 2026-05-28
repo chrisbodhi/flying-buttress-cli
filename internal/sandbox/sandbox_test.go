@@ -82,3 +82,64 @@ func TestDetectOnDarwinDependsOnContainerBinary(t *testing.T) {
 	}
 	// If Docker is available on darwin the test is ambiguous; we just don't assert.
 }
+
+// TestNewDockerBackend_DockerNotFound exercises the LookPath-failure path in
+// newDockerBackend. On hosts where docker is not installed the function must
+// return ErrUnavailable without panicking.
+func TestNewDockerBackend_DockerNotFound(t *testing.T) {
+	t.Parallel()
+	if dockerAvailable() {
+		t.Skip("Docker daemon is reachable; can't test the 'not found' path")
+	}
+	_, err := newDockerBackend()
+	if !errors.Is(err, ErrUnavailable) {
+		t.Errorf("newDockerBackend() = %v, want ErrUnavailable when docker is absent", err)
+	}
+}
+
+// TestNewAppleContainer_NonDarwin exercises the non-darwin early-return path.
+// On non-darwin hosts this covers the runtime.GOOS check. On darwin it's a
+// structural test that confirms the function returns without crashing.
+func TestNewAppleContainer_ReturnsUnavailableOnNonDarwin(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "darwin" {
+		t.Skip("test only meaningful on non-darwin platforms")
+	}
+	_, err := newAppleContainer()
+	if !errors.Is(err, ErrUnavailable) {
+		t.Errorf("newAppleContainer() on non-darwin = %v, want ErrUnavailable", err)
+	}
+}
+
+// TestDetect_ContainerHiddenFallsBackToDocker covers the docker-fallback
+// branches in Detect (sandbox.go lines 75-78). We hide the `container` binary
+// by clearing PATH so newAppleContainer returns ErrUnavailable, then Detect
+// falls through to the docker path (which also fails — no docker daemon either).
+func TestDetect_ContainerHiddenFallsBackToDocker(t *testing.T) {
+	// Not parallel: mutates PATH.
+	if runtime.GOOS != "darwin" {
+		t.Skip("test targets the darwin container->docker fallback path")
+	}
+	t.Setenv("PATH", "")
+
+	_, err := Detect()
+	// With no container and no docker on PATH, ErrUnavailable is expected.
+	if !errors.Is(err, ErrUnavailable) {
+		t.Errorf("Detect() with empty PATH = %v, want ErrUnavailable", err)
+	}
+}
+
+// TestNewAppleContainer_BinaryNotFound covers the LookPath-failure branch when
+// the container binary is absent from PATH.
+func TestNewAppleContainer_BinaryNotFound(t *testing.T) {
+	// Not parallel: mutates PATH.
+	if runtime.GOOS != "darwin" {
+		t.Skip("test targets the darwin LookPath failure path")
+	}
+	t.Setenv("PATH", "")
+
+	_, err := newAppleContainer()
+	if !errors.Is(err, ErrUnavailable) {
+		t.Errorf("newAppleContainer() with empty PATH = %v, want ErrUnavailable", err)
+	}
+}

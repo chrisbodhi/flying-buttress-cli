@@ -33,9 +33,9 @@ func (r PackageRef) Name() string {
 	return fmt.Sprintf("@%s/%s", r.Org, r.Pkg)
 }
 
-// Parse parses a package reference string.
+// ParsePackageRef parses a package reference string.
 // Accepted forms: @org/pkg or @org/pkg@sha
-func Parse(s string) (PackageRef, error) {
+func ParsePackageRef(s string) (PackageRef, error) {
 	if !strings.HasPrefix(s, "@") {
 		return PackageRef{}, fmt.Errorf("package reference must start with @, got %q", s)
 	}

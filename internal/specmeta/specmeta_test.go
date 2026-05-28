@@ -168,3 +168,119 @@ func TestTestRunner_NoTests(t *testing.T) {
 		t.Errorf("TestRunner = (%q, %q), want empty", runner, version)
 	}
 }
+
+func TestTestPackages_NilLang(t *testing.T) {
+	t.Parallel()
+	m := &SpecMeta{} // no languages
+	pkgs := m.TestPackages("typescript")
+	if pkgs != nil {
+		t.Errorf("TestPackages on nil lang = %v, want nil", pkgs)
+	}
+}
+
+func TestTestPackages_LangWithNoTests(t *testing.T) {
+	t.Parallel()
+	m := &SpecMeta{Languages: []Language{{Name: "typescript"}}}
+	pkgs := m.TestPackages("typescript")
+	if pkgs != nil {
+		t.Errorf("TestPackages with no tests = %v, want nil", pkgs)
+	}
+}
+
+func TestTestPackages_WithVersions(t *testing.T) {
+	t.Parallel()
+	m := &SpecMeta{
+		Languages: []Language{
+			{
+				Name: "typescript",
+				Tests: []TestConfig{
+					{
+						Packages: [][]string{
+							{"vitest", "3.2.4"},
+							{"@types/node", "20.0.0"},
+						},
+					},
+				},
+			},
+		},
+	}
+	got := m.TestPackages("typescript")
+	want := []string{"vitest@3.2.4", "@types/node@20.0.0"}
+	if len(got) != len(want) {
+		t.Fatalf("TestPackages = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("TestPackages[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestTestPackages_WithoutVersions(t *testing.T) {
+	t.Parallel()
+	m := &SpecMeta{
+		Languages: []Language{
+			{
+				Name: "typescript",
+				Tests: []TestConfig{
+					{
+						Packages: [][]string{
+							{"vitest"},
+						},
+					},
+				},
+			},
+		},
+	}
+	got := m.TestPackages("typescript")
+	if len(got) != 1 || got[0] != "vitest" {
+		t.Errorf("TestPackages = %v, want [vitest]", got)
+	}
+}
+
+func TestTestPackages_EmptyVersionString(t *testing.T) {
+	t.Parallel()
+	// Entry with empty version string should be returned as bare name.
+	m := &SpecMeta{
+		Languages: []Language{
+			{
+				Name: "typescript",
+				Tests: []TestConfig{
+					{
+						Packages: [][]string{
+							{"vitest", ""},
+						},
+					},
+				},
+			},
+		},
+	}
+	got := m.TestPackages("typescript")
+	if len(got) != 1 || got[0] != "vitest" {
+		t.Errorf("TestPackages = %v, want [vitest] (empty version treated as bare name)", got)
+	}
+}
+
+func TestTestPackages_EmptyEntry(t *testing.T) {
+	t.Parallel()
+	// An empty package entry (zero-length slice) must be skipped.
+	m := &SpecMeta{
+		Languages: []Language{
+			{
+				Name: "typescript",
+				Tests: []TestConfig{
+					{
+						Packages: [][]string{
+							{},
+							{"vitest", "3.0.0"},
+						},
+					},
+				},
+			},
+		},
+	}
+	got := m.TestPackages("typescript")
+	if len(got) != 1 || got[0] != "vitest@3.0.0" {
+		t.Errorf("TestPackages = %v, want [vitest@3.0.0]", got)
+	}
+}

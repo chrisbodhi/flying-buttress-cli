@@ -1,0 +1,45 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - staticcheck
+    - depguard
+
+  settings:
+    errcheck:
+      exclude-functions:
+        # Closing read-only resources in defer — errors are not actionable.
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (*compress/gzip.Reader).Close
+        - (*os.File).Close
+        # Cleanup in defers — best-effort, not actionable.
+        - os.Remove
+        # Writing to hash.Hash (sha256.New) — Write never returns a non-nil error.
+        - (hash.Hash).Write
+        - (io.Writer).Write
+        # Writing to stdout/stderr — if output fails there's nothing useful to do.
+        - fmt.Fprintln
+        - fmt.Fprintf
+        - fmt.Fprint
+        # Pipe close in tests — cleanup only.
+        - (*io.PipeWriter).Close
+        - (*io.PipeReader).Close
+
+    depguard:
+      rules:
+        cmd-no-direct-internals:
+          files:
+            - "**/cmd/**/*.go"
+          deny:
+            - pkg: "buttress/internal/github"
+              desc: "cmd/ must use the specClient interface, not github.Client directly"
+            - pkg: "buttress/internal/store"
+              desc: "cmd/ must use the store through the deps struct, not directly"
+
+# Roadmap (enable one at a time):
+# - wrapcheck    # consider for library extractions only; too noisy for CLI boundary
+# - gocritic     # style issues
+# - noctx        # HTTP calls without context
+# - exhaustive   # switch statements cover all enum values

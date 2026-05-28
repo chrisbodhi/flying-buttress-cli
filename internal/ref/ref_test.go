@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestParse(t *testing.T) {
+func TestParsePackageRef(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -82,22 +82,22 @@ func TestParse(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := Parse(tt.input)
+			got, err := ParsePackageRef(tt.input)
 			if tt.wantErr != "" {
 				if err == nil {
-					t.Fatalf("Parse(%q) = %+v, want error containing %q", tt.input, got, tt.wantErr)
+					t.Fatalf("ParsePackageRef(%q) = %+v, want error containing %q", tt.input, got, tt.wantErr)
 				}
 				if !strings.Contains(err.Error(), tt.wantErr) {
-					t.Fatalf("Parse(%q) error = %q, want substring %q", tt.input, err, tt.wantErr)
+					t.Fatalf("ParsePackageRef(%q) error = %q, want substring %q", tt.input, err, tt.wantErr)
 				}
 				return
 			}
 
 			if err != nil {
-				t.Fatalf("Parse(%q) unexpected error: %v", tt.input, err)
+				t.Fatalf("ParsePackageRef(%q) unexpected error: %v", tt.input, err)
 			}
 			if got != tt.want {
-				t.Errorf("Parse(%q) = %+v, want %+v", tt.input, got, tt.want)
+				t.Errorf("ParsePackageRef(%q) = %+v, want %+v", tt.input, got, tt.want)
 			}
 		})
 	}
@@ -161,7 +161,7 @@ func TestPackageRef_Name(t *testing.T) {
 }
 
 // TestParseRoundTrip verifies that String() produces output that round-trips
-// back through Parse() — a key invariant for any user-visible serialization.
+// back through ParsePackageRef() — a key invariant for any user-visible serialization.
 func TestParseRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -174,12 +174,12 @@ func TestParseRoundTrip(t *testing.T) {
 	for _, in := range inputs {
 		t.Run(in, func(t *testing.T) {
 			t.Parallel()
-			parsed, err := Parse(in)
+			parsed, err := ParsePackageRef(in)
 			if err != nil {
-				t.Fatalf("Parse(%q) failed: %v", in, err)
+				t.Fatalf("ParsePackageRef(%q) failed: %v", in, err)
 			}
 			if got := parsed.String(); got != in {
-				t.Errorf("round-trip: Parse(%q).String() = %q", in, got)
+				t.Errorf("round-trip: ParsePackageRef(%q).String() = %q", in, got)
 			}
 		})
 	}

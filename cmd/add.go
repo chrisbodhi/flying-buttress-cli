@@ -112,7 +112,7 @@ func runAdd(ctx context.Context, deps *addDeps, rawRef, versionsURL string, doGe
 	}
 
 	// --- 1. Parse the package reference ---
-	pkg, err := ref.Parse(rawRef)
+	pkg, err := ref.ParsePackageRef(rawRef)
 	if err != nil {
 		return err
 	}
