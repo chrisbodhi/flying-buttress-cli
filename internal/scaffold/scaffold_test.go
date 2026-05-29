@@ -99,19 +99,19 @@ func TestPlan_FilePaths(t *testing.T) {
 		want []string
 	}{
 		{"typescript", []string{
-			"buttress.toml", "versions.txt", "README.md",
+			"buttress.toml", "versions.txt", "README.md", "CLAUDE.md", "AGENTS.md",
 			"docs/overview.md", "spec/behavior.md",
 			"tests/typescript/left-pad.test.ts",
 			"types/typescript/left-pad.d.ts",
 		}},
 		{"go", []string{
-			"buttress.toml", "versions.txt", "README.md",
+			"buttress.toml", "versions.txt", "README.md", "CLAUDE.md", "AGENTS.md",
 			"docs/overview.md", "spec/behavior.md",
 			"tests/go/left_pad_test.go",
 			"types/go/left_pad.go",
 		}},
 		{"python", []string{
-			"buttress.toml", "versions.txt", "README.md",
+			"buttress.toml", "versions.txt", "README.md", "CLAUDE.md", "AGENTS.md",
 			"docs/overview.md", "spec/behavior.md",
 			"tests/python/test_left_pad.py",
 			"types/python/left_pad.pyi",

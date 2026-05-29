@@ -102,6 +102,8 @@ func Plan(s Spec) ([]File, error) {
 		{Path: "buttress.toml", Content: renderButtressTOML(s)},
 		{Path: "versions.txt", Content: renderVersionsTXT()},
 		{Path: "README.md", Content: renderREADME(s)},
+		{Path: "CLAUDE.md", Content: renderCLAUDEMD(s)},
+		{Path: "AGENTS.md", Content: renderAGENTSMD()},
 		{Path: "docs/overview.md", Content: renderOverview(s)},
 		{Path: "spec/behavior.md", Content: renderBehavior(s)},
 	}
@@ -413,6 +415,43 @@ func pySlug(s string) string {
 // Triple-double-quote sequences inside s are escaped.
 func pyDocstring(s string) string {
 	return `"""` + strings.ReplaceAll(s, `"""`, `\"\"\"`) + `"""`
+}
+
+// --- CLAUDE.md ---
+
+func renderCLAUDEMD(s Spec) []byte {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s\n\n", s.PackageName())
+	fmt.Fprintf(&b, "%s\n\n", s.Description)
+	b.WriteString("This is a Flying Buttress spec package. It contains documentation,\n")
+	b.WriteString("behavioral specs, types, and test stubs — but no implementation.\n")
+	b.WriteString("Consumers generate implementations locally with their preferred LLM.\n\n")
+	b.WriteString("## Layout\n\n")
+	b.WriteString("- `docs/` — prose documentation\n")
+	b.WriteString("- `spec/` — behavioral specs\n")
+	fmt.Fprintf(&b, "- `tests/%s/` — test stubs\n", s.Language.Name)
+	fmt.Fprintf(&b, "- `types/%s/` — type definitions\n\n", s.Language.Name)
+	if len(s.Behaviors) > 0 {
+		b.WriteString("## Behaviors\n\n")
+		for _, x := range s.Behaviors {
+			fmt.Fprintf(&b, "- %s\n", x)
+		}
+		b.WriteByte('\n')
+	}
+	if len(s.EdgeCases) > 0 {
+		b.WriteString("## Edge cases\n\n")
+		for _, x := range s.EdgeCases {
+			fmt.Fprintf(&b, "- %s\n", x)
+		}
+		b.WriteByte('\n')
+	}
+	return []byte(b.String())
+}
+
+// --- AGENTS.md ---
+
+func renderAGENTSMD() []byte {
+	return []byte("@CLAUDE.md\n")
 }
 
 // --- types ---
