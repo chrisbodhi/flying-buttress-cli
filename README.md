@@ -25,19 +25,33 @@ go build -o buttress .
 
 ```bash
 # Download a spec and pin it in buttress.lock
-buttress add @org/pkg
+buttress spec add @org/pkg
 
 # Pin a specific version by content hash
-buttress add @org/pkg@sha256:abc123…
+buttress spec add @org/pkg@sha256:abc123…
 
 # Download and immediately generate an implementation
-buttress add @org/pkg --generate
+buttress spec add @org/pkg --generate
 
 # Use a custom version list URL (e.g. a gist, for testing)
-buttress add @org/pkg --versions-url https://…/VERSIONS.txt
+buttress spec add @org/pkg --versions-url https://…/VERSIONS.txt
 
 # Generate an implementation from an already-installed spec
-buttress generate @org/pkg
+buttress spec generate @org/pkg
+
+# Initialize a consumer project (creates an empty buttress.lock)
+buttress spec init
+
+# Scaffold a new spec package (interactive wizard for spec authors)
+buttress spec init --spec
+
+# List installed spec packages
+buttress spec list
+buttress spec list --json
+
+# Compute the content hash of a spec directory (for spec authors)
+buttress spec hash .
+buttress spec hash --verbose .
 
 # Configure your LLM connection (interactive wizard)
 buttress config
@@ -45,20 +59,6 @@ buttress config
 # Set or get a single config value without the wizard
 buttress config set llm.model gpt-4o
 buttress config get llm.model
-
-# Initialize a consumer project (creates an empty buttress.lock)
-buttress init
-
-# Scaffold a new spec package (interactive wizard for spec authors)
-buttress init --spec
-
-# List installed spec packages
-buttress list
-buttress list --json
-
-# Compute the content hash of a spec directory (for spec authors)
-buttress hash .
-buttress hash --verbose .
 ```
 
 When no hash is provided, an interactive picker shows available versions pulled from the spec repo's `VERSIONS.txt`.
@@ -87,7 +87,7 @@ cache_dir = ""             # default: ~/.cache/buttress
 
 Spec packages live in GitHub repos. The `@org/pkg` reference maps directly to `github.com/org/pkg`. Each version is a git tag named after its content hash (e.g. `sha256-abc123…`).
 
-**After `buttress add`:**
+**After `buttress spec add`:**
 
 ```
 ~/.cache/buttress/packages/@org/pkg/<hash>/   ← global content-addressed cache
@@ -136,13 +136,14 @@ Initial spec and tests.
 
 | Command | Status |
 |---|---|
-| `buttress add` | Working |
-| `buttress add --generate` | Working |
+| `buttress spec add` | Working |
+| `buttress spec add --generate` | Working |
+| `buttress spec generate` | Working |
+| `buttress spec hash` | Working |
+| `buttress spec init` | Working |
+| `buttress spec list` | Working |
 | `buttress config` | Working |
-| `buttress generate` | Working |
-| `buttress hash` | Working |
-| `buttress init` | Working |
-| `buttress list` | Working |
-| `buttress remove` | Planned |
-| `buttress update` | Planned |
-| `buttress verify` | Planned |
+| `buttress auth` | Working (no-op) |
+| `buttress spec remove` | Planned |
+| `buttress spec update` | Planned |
+| `buttress spec verify` | Planned |

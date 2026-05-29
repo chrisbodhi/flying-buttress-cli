@@ -83,10 +83,10 @@ which also serves as the git tag in the spec repository. If omitted, an
 interactive version picker is shown.
 
 Examples:
-  buttress add @chrisbodhi/left-pad
-  buttress add @chrisbodhi/left-pad@sha256:abc123
-  buttress add @chrisbodhi/left-pad --versions-url https://raw.githubusercontent.com/chrisbodhi/left-pad/HEAD/VERSIONS.txt
-  buttress add @chrisbodhi/left-pad --generate`,
+  buttress spec add @chrisbodhi/left-pad
+  buttress spec add @chrisbodhi/left-pad@sha256:abc123
+  buttress spec add @chrisbodhi/left-pad --versions-url https://raw.githubusercontent.com/chrisbodhi/left-pad/HEAD/VERSIONS.txt
+  buttress spec add @chrisbodhi/left-pad --generate`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runAdd(cmd.Context(), deps, args[0], versionsURL, doGenerate)

@@ -600,28 +600,38 @@ func TestRunAdd_StoreNewError(t *testing.T) {
 // Execute (cmd/root.go) smoke test
 // ---------------------------------------------------------------------------
 
-func TestRootCmd_HasAddSubcommand(t *testing.T) {
+func TestRootCmd_HasSpecSubcommand(t *testing.T) {
 	t.Parallel()
 	root := newRootCmd()
 	if root.Use == "" {
 		t.Error("root.Use is empty")
 	}
-	var foundAdd bool
+	var foundSpec bool
 	for _, c := range root.Commands() {
-		if c.Name() == "add" {
-			foundAdd = true
+		if c.Name() == "spec" {
+			foundSpec = true
+			var foundAdd bool
+			for _, sc := range c.Commands() {
+				if sc.Name() == "add" {
+					foundAdd = true
+					break
+				}
+			}
+			if !foundAdd {
+				t.Error("spec subcommand is missing 'add'")
+			}
 			break
 		}
 	}
-	if !foundAdd {
-		t.Error("root command tree is missing 'add' subcommand")
+	if !foundSpec {
+		t.Error("root command tree is missing 'spec' subcommand")
 	}
 }
 
 func TestRootCmd_HelpExecutes(t *testing.T) {
 	t.Parallel()
 	root := newRootCmd()
-	root.SetArgs([]string{"add", "--help"})
+	root.SetArgs([]string{"spec", "add", "--help"})
 	out := &bytes.Buffer{}
 	root.SetOut(out)
 	root.SetErr(out)

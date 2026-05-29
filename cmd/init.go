@@ -29,9 +29,9 @@ if none exists).
 With --spec, runs an interactive wizard to scaffold a new spec package.
 
 Examples:
-  buttress init
-  buttress init --spec
-  buttress init --spec ./my-spec`,
+  buttress spec init
+  buttress spec init --spec
+  buttress spec init --spec ./my-spec`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."
@@ -80,8 +80,8 @@ func runInitSpec(dir string) error {
 		"Next steps:",
 		"  1. Fill in assertions in tests/",
 		"  2. Define types in types/",
-		"  3. Run `buttress hash .` to compute the spec hash",
-		"  4. Run `buttress publish` to add the first version",
+		"  3. Run `buttress spec hash .` to compute the spec hash",
+		"  4. Run `buttress publish` to publish the first version",
 	} {
 		fmt.Fprintln(os.Stderr, tui.StyleDim.Render(line))
 	}

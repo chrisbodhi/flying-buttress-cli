@@ -50,8 +50,8 @@ func TestRenderList_Empty(t *testing.T) {
 		if !strings.Contains(got, "No specs installed") {
 			t.Errorf("stderr = %q, want hint mentioning 'No specs installed'", got)
 		}
-		if !strings.Contains(got, "buttress add") {
-			t.Errorf("stderr = %q, want hint mentioning 'buttress add'", got)
+		if !strings.Contains(got, "buttress spec add") {
+			t.Errorf("stderr = %q, want hint mentioning 'buttress spec add'", got)
 		}
 	})
 

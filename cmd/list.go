@@ -25,8 +25,8 @@ func newListCmd() *cobra.Command {
 pinned content hash and install date.
 
 Examples:
-  buttress list
-  buttress list --json`,
+  buttress spec list
+  buttress spec list --json`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runList(asJSON)
@@ -67,7 +67,7 @@ func renderList(lock map[string]store.LockEntry, asJSON bool, stdout, stderr io.
 	}
 
 	if len(lock) == 0 {
-		fmt.Fprintln(stderr, tui.StyleDim.Render("No specs installed. Run 'buttress add @org/pkg' to get started."))
+		fmt.Fprintln(stderr, tui.StyleDim.Render("No specs installed. Run 'buttress spec add @org/pkg' to get started."))
 		return nil
 	}
 

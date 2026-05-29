@@ -22,9 +22,9 @@ VERSIONS.txt. The output is the value that goes on the hash line in VERSIONS.txt
 and becomes the git tag name (with ':' replaced by '-').
 
 Examples:
-  buttress hash .
-  buttress hash --verbose .
-  buttress hash ./my-spec`,
+  buttress spec hash .
+  buttress spec hash --verbose .
+  buttress spec hash ./my-spec`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."

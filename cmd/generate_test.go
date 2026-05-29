@@ -105,8 +105,8 @@ func TestRunGenerateCmd_PackageNotInstalled(t *testing.T) {
 	if !strings.Contains(err.Error(), "is not installed") {
 		t.Errorf("error = %q, want substring 'is not installed'", err)
 	}
-	if !strings.Contains(err.Error(), "buttress add") {
-		t.Errorf("error = %q, want substring 'buttress add' as guidance", err)
+	if !strings.Contains(err.Error(), "buttress spec add") {
+		t.Errorf("error = %q, want substring 'buttress spec add' as guidance", err)
 	}
 }
 

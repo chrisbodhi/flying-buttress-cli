@@ -20,12 +20,9 @@ Distribute docs, tests, specs, and type definitions — let your LLM generate
 the implementation.`,
 		SilenceUsage: true,
 	}
-	root.AddCommand(newAddCmd())
+	root.AddCommand(newAuthCmd())
 	root.AddCommand(newConfigCmd())
-	root.AddCommand(newGenerateCmd())
-	root.AddCommand(newHashCmd())
-	root.AddCommand(newInitCmd())
-	root.AddCommand(newListCmd())
+	root.AddCommand(newSpecCmd())
 	return root
 }
 

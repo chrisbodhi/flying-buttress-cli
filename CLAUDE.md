@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 go build ./...          # build
 go test ./...           # run all tests
 go test ./internal/...  # run a specific package
-go run . add @org/pkg   # run the CLI directly
+go run . spec add @org/pkg   # run the CLI directly
 ```
 
 The binary name is `buttress` (the `Use` field in root command).
@@ -18,7 +18,7 @@ The binary name is `buttress` (the `Use` field in root command).
 Flying Buttress is a spec registry CLI — it distributes docs, tests, specs, and type definitions (SHA-pinned, not versioned). Users generate implementations from specs via LLM. Think Bun-style package manager but for specs, not code.
 
 **Layer separation:**
-- `cmd/` — cobra commands wired with `charmbracelet/fang`; owns TUI output and flag parsing; orchestrates service calls. Subcommands: `add`, `config`, `generate`, `hash`, `init`, `list`
+- `cmd/` — cobra commands wired with `charmbracelet/fang`; owns TUI output and flag parsing; orchestrates service calls. Top-level commands: `auth` (no-op), `config` (with `set`/`get` subcommands), `spec` (parent for `add`, `generate`, `hash`, `init`, `list`)
 - `internal/ref/` — parses `@org/pkg[@hash]` package reference strings
 - `internal/versions/` — defines the `Version` type and parses the VERSIONS.txt format
 - `internal/github/` — HTTP client; fetches VERSIONS.txt from any raw URL; downloads and verifies spec tarballs from GitHub tag archives
@@ -27,7 +27,7 @@ Flying Buttress is a spec registry CLI — it distributes docs, tests, specs, an
 - `internal/localconfig/` — per-project `.buttress.local.toml` overrides (package manager, per-package output/language)
 - `internal/contenthash/` — canonical SHA-256 over files under `human/` and `machine/` only; files walked in lexical order. `extractTarGz` in `internal/github/` uses the same algorithm and must agree
 - `internal/specmeta/` — parses `buttress.toml` from a spec archive (name, description, per-language test config)
-- `internal/scaffold/` — `Plan(Spec) []File` + `Write` for `buttress init` to generate spec package layouts
+- `internal/scaffold/` — `Plan(Spec) []File` + `Write` for `buttress spec init` to generate spec package layouts
 - `internal/sandbox/` — runs untrusted commands in isolation; backends are Apple `container` CLI (macOS) and Docker, tried in that order by `Detect`
 - `internal/generate/` — `Generator` interface; `Stub` returns `ErrNotConfigured`; `LLMGenerator` calls an OpenAI-compatible chat completions endpoint with retry/verification; `SpecArchive` struct
 - `internal/tui/` — lipgloss styles and bubbletea version picker

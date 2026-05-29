@@ -21,13 +21,13 @@ func newGenerateCmd() *cobra.Command {
 		Use:   "generate <@org/pkg>",
 		Short: "Generate an implementation from an installed spec",
 		Long: `Generate an implementation source file from a spec package that has
-already been installed with 'buttress add'.
+already been installed with 'buttress spec add'.
 
 Requires LLM credentials in ~/.config/buttress/config.toml.
 Output path and language can be overridden per-package in .buttress.local.toml.
 
 Examples:
-  buttress generate @chrisbodhi/left-pad`,
+  buttress spec generate @chrisbodhi/left-pad`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runGenerateCmd(cmd.Context(), args[0])
@@ -66,7 +66,7 @@ func runGenerateCmd(ctx context.Context, rawRef string) error {
 	}
 	entry, ok := lock[store.LockKey(pkg.Org, pkg.Pkg)]
 	if !ok {
-		return fmt.Errorf("%s is not installed — run 'buttress add %s' first", pkg.Name(), pkg.Name())
+		return fmt.Errorf("%s is not installed — run 'buttress spec add %s' first", pkg.Name(), pkg.Name())
 	}
 
 	// The spec lives in ./buttress/@org/pkg/ under the project root.
