@@ -1,6 +1,8 @@
 package sandbox
 
 import (
+	"context"
+	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
@@ -340,6 +342,31 @@ func TestDockerBuildArgvRejectsInvalidSpec(t *testing.T) {
 			assertArgvErr(t, d, tt.spec, tt.wantError)
 		})
 	}
+}
+
+// TestDockerRun_InvalidSpec covers the early-return path in Run when buildArgv
+// rejects the spec. No Docker daemon is needed.
+func TestDockerRun_InvalidSpec(t *testing.T) {
+	t.Parallel()
+	d := &dockerBackend{binary: "/nonexistent"}
+	err := d.Run(context.Background(), Spec{}) // missing Image and Command
+	if err == nil {
+		t.Fatal("expected error from invalid spec")
+	}
+}
+
+// TestDockerRun_ExecPath covers the exec path in Run using a real binary that
+// exits immediately. The command will fail (wrong args) but the code path
+// through Run is fully exercised.
+func TestDockerRun_ExecPath(t *testing.T) {
+	t.Parallel()
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("'true' not found on PATH")
+	}
+	d := &dockerBackend{binary: truePath}
+	// 'true' ignores all arguments and exits 0.
+	_ = d.Run(context.Background(), Spec{Image: "img", Command: []string{"sh"}})
 }
 
 // TestDockerBuildArgvNeverEmitsNoDNS confirms that --no-dns never appears in

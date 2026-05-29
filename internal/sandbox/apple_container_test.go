@@ -1,6 +1,8 @@
 package sandbox
 
 import (
+	"context"
+	"os/exec"
 	"reflect"
 	"strings"
 	"testing"
@@ -201,4 +203,29 @@ func TestAppleContainerBuildArgvRejectsInvalidSpec(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAppleContainerRun_InvalidSpec covers the early-return path in Run when
+// buildArgv rejects the spec. No container runtime is needed.
+func TestAppleContainerRun_InvalidSpec(t *testing.T) {
+	t.Parallel()
+	c := &appleContainer{binary: "/nonexistent"}
+	err := c.Run(context.Background(), Spec{}) // missing Image and Command
+	if err == nil {
+		t.Fatal("expected error from invalid spec")
+	}
+}
+
+// TestAppleContainerRun_ExecPath covers the exec path in Run using a real
+// binary that exits immediately. The command will fail (wrong args) but the
+// code path through Run is fully exercised.
+func TestAppleContainerRun_ExecPath(t *testing.T) {
+	t.Parallel()
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("'true' not found on PATH")
+	}
+	c := &appleContainer{binary: truePath}
+	// 'true' ignores all arguments and exits 0.
+	_ = c.Run(context.Background(), Spec{Image: "img", Command: []string{"sh"}})
 }
