@@ -255,3 +255,124 @@ func TestGenerateCmd_HelpExecutes(t *testing.T) {
 		t.Errorf("--help output missing description, got: %s", out.String())
 	}
 }
+
+func TestNewGenerateCmd_RunE_ExercisesRunGenerateCmd(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	c := newGenerateCmd()
+	err := c.RunE(c, []string{"@a/b"})
+	if err == nil {
+		t.Fatal("expected error with no LLM configured")
+	}
+	if !strings.Contains(err.Error(), "LLM credentials") {
+		t.Errorf("error = %q, want substring 'LLM credentials'", err)
+	}
+}
+
+func TestRunGenerateCmd_InvalidLockFile(t *testing.T) {
+	// Not parallel: mutates HOME and cwd.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	configDir := filepath.Join(tmpHome, ".config", "buttress")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"),
+		[]byte("[llm]\nprovider=\"x\"\nmodel=\"y\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	projDir := t.TempDir()
+	// Write an invalid JSON lock file so st.ReadLock() returns an error.
+	if err := os.WriteFile(filepath.Join(projDir, "buttress.lock"),
+		[]byte("not valid json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origWd, _ := os.Getwd()
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	err := runGenerateCmd(context.Background(), "@a/b")
+	if err == nil {
+		t.Fatal("expected error for invalid lock file")
+	}
+	if !strings.Contains(err.Error(), "buttress.lock") {
+		t.Errorf("error = %q, want substring 'buttress.lock'", err)
+	}
+}
+
+func TestRunGenerateCmd_InvalidConfig(t *testing.T) {
+	// Not parallel: mutates HOME.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	configDir := filepath.Join(tmpHome, ".config", "buttress")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Invalid TOML triggers config.Load() error.
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"),
+		[]byte("not = = valid toml"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := runGenerateCmd(context.Background(), "@a/b")
+	if err == nil {
+		t.Fatal("expected error for invalid config")
+	}
+	if !strings.Contains(err.Error(), "loading config") {
+		t.Errorf("error = %q, want substring 'loading config'", err)
+	}
+}
+
+func TestRunGenerateCmd_NoLanguageConfigured(t *testing.T) {
+	// Not parallel: mutates HOME and cwd.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Config with LLM but no project.language.
+	configDir := filepath.Join(tmpHome, ".config", "buttress")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cacheDir := filepath.Join(tmpHome, "cache")
+	cfgBody := fmt.Sprintf("[llm]\nprovider=\"x\"\nmodel=\"y\"\n\n[registry]\ncache_dir=%q\n", cacheDir)
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(cfgBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Project dir with the package installed in the lock.
+	projDir := t.TempDir()
+	st, err := store.New(cacheDir, projDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.WriteLock(map[string]store.LockEntry{
+		"@a/b": {Org: "a", Pkg: "b", Hash: "sha256:x"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Also create the spec dir so resolveGenOutput is reached.
+	specDir := filepath.Join(projDir, "buttress", "@a", "b")
+	if err := os.MkdirAll(specDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origWd, _ := os.Getwd()
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	err = runGenerateCmd(context.Background(), "@a/b")
+	if err == nil {
+		t.Fatal("expected error for missing language")
+	}
+	if !strings.Contains(err.Error(), "no language configured") {
+		t.Errorf("error = %q, want substring 'no language configured'", err)
+	}
+}

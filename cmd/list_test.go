@@ -324,6 +324,29 @@ func TestRunList_LoadConfigError(t *testing.T) {
 	}
 }
 
+func TestRunList_InvalidLockFile(t *testing.T) {
+	// Not parallel: mutates HOME and cwd.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	projDir := t.TempDir()
+	// Write a lock file that contains invalid JSON so ReadLock returns an error.
+	lockPath := filepath.Join(projDir, "buttress.lock")
+	if err := os.WriteFile(lockPath, []byte("not valid json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origWd, _ := os.Getwd()
+	if err := os.Chdir(projDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWd) })
+
+	if err := runList(false); err == nil {
+		t.Fatal("expected error for invalid lock file")
+	}
+}
+
 func TestRunList_HumanOutput(t *testing.T) {
 	// Not parallel: mutates HOME and cwd.
 	tmpHome := t.TempDir()

@@ -613,6 +613,45 @@ func TestRunAdd_StoreNewError(t *testing.T) {
 	}
 }
 
+func TestRunAdd_ReadLockError(t *testing.T) {
+	t.Parallel()
+
+	fx := newFixture(t, nil)
+	// Write an invalid JSON lock file so ReadLock returns a parse error.
+	lockPath := filepath.Join(fx.projDir, "buttress.lock")
+	if err := os.WriteFile(lockPath, []byte("not valid json"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := runAdd(context.Background(), fx.deps, "@a/b@sha256:x", "", false)
+	if err == nil {
+		t.Fatal("expected error for invalid lock file")
+	}
+	if !strings.Contains(err.Error(), "buttress.lock") {
+		t.Errorf("error = %q, want substring 'buttress.lock'", err)
+	}
+}
+
+func TestRunAdd_WriteLockError(t *testing.T) {
+	t.Parallel()
+	if os.Getuid() == 0 {
+		t.Skip("skipping: running as root, permissions are not enforced")
+	}
+
+	fx := newFixture(t, nil)
+	// After a successful fetch and commit, make the project dir read-only so
+	// WriteLock cannot create/update buttress.lock.
+	if err := os.Chmod(fx.projDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(fx.projDir, 0o755) })
+
+	err := runAdd(context.Background(), fx.deps, "@a/b@sha256:x", "", false)
+	if err == nil {
+		t.Fatal("expected error when lock file cannot be written")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Execute (cmd/root.go) smoke test
 // ---------------------------------------------------------------------------
@@ -668,5 +707,34 @@ func TestRootCmd_UnknownSubcommandErrors(t *testing.T) {
 	root.SetErr(&bytes.Buffer{})
 	if err := root.Execute(); err == nil {
 		t.Error("expected error for unknown subcommand")
+	}
+}
+
+// TestExecute_NoSubcommand exercises root.Execute (the fang wrapper) by
+// running the program with no subcommand, which prints help and returns nil.
+func TestExecute_NoSubcommand(t *testing.T) {
+	// Not parallel: modifies os.Args.
+	origArgs := os.Args
+	os.Args = []string{"buttress"}
+	defer func() { os.Args = origArgs }()
+
+	if err := Execute(context.Background()); err != nil {
+		t.Errorf("Execute() with no args = %v, want nil", err)
+	}
+}
+
+// TestNewAddCmd_RunE_ExercisesRunAdd covers the RunE closure body in newAddCmd.
+// An invalid ref fails in ref.ParsePackageRef before any network call.
+func TestNewAddCmd_RunE_ExercisesRunAdd(t *testing.T) {
+	// Not parallel: sets HOME.
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	c := newAddCmd()
+	err := c.RunE(c, []string{"not-a-valid-ref"})
+	if err == nil {
+		t.Fatal("expected error for invalid ref")
+	}
+	if !strings.Contains(err.Error(), "must start with @") {
+		t.Errorf("error = %q, want substring 'must start with @'", err)
 	}
 }

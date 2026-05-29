@@ -157,6 +157,48 @@ func TestDescriptionValidator(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// openEditorForOverview
+// ---------------------------------------------------------------------------
+
+func TestOpenEditorForOverview_HappyPath(t *testing.T) {
+	t.Setenv("EDITOR", "true")
+	s := scaffold.Spec{Org: "myorg", Pkg: "mypkg", Description: "A test package."}
+	result, err := openEditorForOverview(s)
+	if err != nil {
+		t.Fatalf("openEditorForOverview() error: %v", err)
+	}
+	if !strings.Contains(result, "mypkg") {
+		t.Errorf("result %q does not contain package name", result)
+	}
+	if strings.Contains(result, "<!--") {
+		t.Errorf("result %q should not contain HTML comments after stripping", result)
+	}
+}
+
+func TestOpenEditorForOverview_EditorExitsNonZero(t *testing.T) {
+	t.Setenv("EDITOR", "false")
+	s := scaffold.Spec{Org: "myorg", Pkg: "mypkg", Description: "A test package."}
+	_, err := openEditorForOverview(s)
+	if err == nil {
+		t.Fatal("expected error when editor exits non-zero")
+	}
+	if !strings.Contains(err.Error(), "editor") {
+		t.Errorf("error = %q, want substring 'editor'", err)
+	}
+}
+
+func TestOpenEditorForOverview_EditorDeletesTempFile(t *testing.T) {
+	// EDITOR=rm deletes the temp file before we can read it back,
+	// triggering the os.ReadFile error path.
+	t.Setenv("EDITOR", "rm")
+	s := scaffold.Spec{Org: "myorg", Pkg: "mypkg", Description: "A test package."}
+	_, err := openEditorForOverview(s)
+	if err == nil {
+		t.Fatal("expected error when editor removes the temp file")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // newInitCmd metadata
 // ---------------------------------------------------------------------------
 

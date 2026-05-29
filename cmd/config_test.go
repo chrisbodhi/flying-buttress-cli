@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -599,6 +600,128 @@ func TestRunConfigSet_AllKeys(t *testing.T) {
 				t.Errorf("runConfigGet(%q) = %q, want %q", tt.key, strings.TrimSpace(stdout.String()), tt.value)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Error paths — configPath failures
+// ---------------------------------------------------------------------------
+
+func TestRunConfig_ConfigPathError(t *testing.T) {
+	t.Parallel()
+	deps, _, _ := newConfigFixture(t, nil)
+	deps.configPath = func() (string, error) { return "", errors.New("no home dir") }
+	if err := runConfig(deps); err == nil || !strings.Contains(err.Error(), "no home dir") {
+		t.Errorf("runConfig() = %v, want error containing 'no home dir'", err)
+	}
+}
+
+func TestRunConfigSet_ConfigPathError(t *testing.T) {
+	t.Parallel()
+	deps, _, _ := newConfigFixture(t, nil)
+	deps.configPath = func() (string, error) { return "", errors.New("no home dir") }
+	if err := runConfigSet(deps, "llm.model", "x"); err == nil || !strings.Contains(err.Error(), "no home dir") {
+		t.Errorf("runConfigSet() = %v, want error containing 'no home dir'", err)
+	}
+}
+
+func TestRunConfigGet_ConfigPathError(t *testing.T) {
+	t.Parallel()
+	deps, _, _ := newConfigFixture(t, nil)
+	deps.configPath = func() (string, error) { return "", errors.New("no home dir") }
+	if err := runConfigGet(deps, "llm.model"); err == nil || !strings.Contains(err.Error(), "no home dir") {
+		t.Errorf("runConfigGet() = %v, want error containing 'no home dir'", err)
+	}
+}
+
+func TestRunConfigSet_InvalidTOMLErrors(t *testing.T) {
+	t.Parallel()
+	deps, savedPath, _ := newConfigFixture(t, nil)
+	seedConfig(t, *savedPath, "not = = valid toml")
+	if err := runConfigSet(deps, "llm.model", "x"); err == nil {
+		t.Error("expected error for invalid TOML config")
+	}
+}
+
+func TestRunConfig_WriteConfigError(t *testing.T) {
+	t.Parallel()
+	if os.Getuid() == 0 {
+		t.Skip("skipping: running as root, permissions are not enforced")
+	}
+	dir := t.TempDir()
+	roDir := filepath.Join(dir, "ro")
+	if err := os.Mkdir(roDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(roDir, "config.toml")
+	deps, _, _ := newConfigFixture(t, []string{
+		"1", "ollama", "http://localhost:11434", "llama3", "go",
+	})
+	deps.configPath = func() (string, error) { return path, nil }
+	err := runConfig(deps)
+	if err == nil {
+		t.Fatal("expected error writing to read-only directory")
+	}
+	if !strings.Contains(err.Error(), "writing config") {
+		t.Errorf("error = %q, want substring 'writing config'", err)
+	}
+}
+
+func TestRunConfigSet_WriteConfigError(t *testing.T) {
+	t.Parallel()
+	if os.Getuid() == 0 {
+		t.Skip("skipping: running as root, permissions are not enforced")
+	}
+	dir := t.TempDir()
+	// Existing read-only dir: config.LoadFrom sees no file (empty config), then
+	// writeConfig's MkdirAll succeeds (dir exists) but WriteFile fails.
+	roDir := filepath.Join(dir, "ro")
+	if err := os.Mkdir(roDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(roDir, "config.toml")
+	deps, _, _ := newConfigFixture(t, nil)
+	deps.configPath = func() (string, error) { return path, nil }
+	err := runConfigSet(deps, "llm.model", "llama3")
+	if err == nil {
+		t.Fatal("expected error writing to read-only directory")
+	}
+	if !strings.Contains(err.Error(), "writing config") {
+		t.Errorf("error = %q, want substring 'writing config'", err)
+	}
+}
+
+func TestRunConfigGet_InvalidTOMLErrors(t *testing.T) {
+	t.Parallel()
+	deps, savedPath, _ := newConfigFixture(t, nil)
+	seedConfig(t, *savedPath, "not = = valid toml")
+	if err := runConfigGet(deps, "llm.model"); err == nil {
+		t.Error("expected error for invalid TOML config")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// writeConfig — write failure
+// ---------------------------------------------------------------------------
+
+func TestWriteConfig_WriteFileError(t *testing.T) {
+	t.Parallel()
+	if os.Getuid() == 0 {
+		t.Skip("skipping: running as root, permissions are not enforced")
+	}
+	dir := t.TempDir()
+	// Existing read-only dir: MkdirAll succeeds (dir already present), WriteFile fails.
+	roDir := filepath.Join(dir, "ro")
+	if err := os.Mkdir(roDir, 0o555); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(roDir, "config.toml")
+	err := writeConfig(path, &config.Config{})
+	if err == nil {
+		t.Fatal("expected error writing to read-only directory")
+	}
+	if !strings.Contains(err.Error(), "writing config") {
+		t.Errorf("error = %q, want substring 'writing config'", err)
 	}
 }
 
