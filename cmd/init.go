@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -17,51 +16,23 @@ import (
 )
 
 func newInitCmd() *cobra.Command {
-	var asSpec bool
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "init [dir]",
-		Short: "Scaffold a new buttress project or spec package",
-		Long: `Initialize a directory.
-
-Without flags, prepares a consumer project (creates an empty buttress.lock
-if none exists).
-
-With --spec, runs an interactive wizard to scaffold a new spec package.
+		Short: "Scaffold a new spec package",
+		Long: `Run an interactive wizard to scaffold a new spec package.
 
 Examples:
   buttress spec init
-  buttress spec init --spec
-  buttress spec init --spec ./my-spec`,
+  buttress spec init ./my-spec`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dir := "."
 			if len(args) > 0 {
 				dir = args[0]
 			}
-			if asSpec {
-				return runInitSpec(dir)
-			}
-			return runInitConsumer(dir)
+			return runInitSpec(dir)
 		},
 	}
-	cmd.Flags().BoolVar(&asSpec, "spec", false, "scaffold a spec package (for spec authors)")
-	return cmd
-}
-
-func runInitConsumer(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	lockPath := filepath.Join(dir, "buttress.lock")
-	if _, err := os.Stat(lockPath); err == nil {
-		fmt.Fprintf(os.Stderr, "%s buttress.lock already exists\n", tui.StyleDim.Render("~"))
-		return nil
-	}
-	if err := os.WriteFile(lockPath, []byte("{}\n"), 0o644); err != nil {
-		return err
-	}
-	fmt.Printf("%s created %s\n", tui.StyleSuccess.Render("✓"), lockPath)
-	return nil
 }
 
 func runInitSpec(dir string) error {

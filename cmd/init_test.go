@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -159,55 +157,6 @@ func TestDescriptionValidator(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// runInitConsumer
-// ---------------------------------------------------------------------------
-
-func TestRunInitConsumer_CreatesLockFile(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	if err := runInitConsumer(dir); err != nil {
-		t.Fatalf("runInitConsumer() error: %v", err)
-	}
-	lockPath := filepath.Join(dir, "buttress.lock")
-	body, err := os.ReadFile(lockPath)
-	if err != nil {
-		t.Fatalf("lock file not created: %v", err)
-	}
-	if strings.TrimSpace(string(body)) != "{}" {
-		t.Errorf("lock file = %q, want {}", body)
-	}
-}
-
-func TestRunInitConsumer_CreatesDir(t *testing.T) {
-	t.Parallel()
-	dir := filepath.Join(t.TempDir(), "new-project")
-	if err := runInitConsumer(dir); err != nil {
-		t.Fatalf("runInitConsumer() error: %v", err)
-	}
-	if _, err := os.Stat(dir); err != nil {
-		t.Errorf("dir not created: %v", err)
-	}
-}
-
-func TestRunInitConsumer_AlreadyExists_Noop(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	lockPath := filepath.Join(dir, "buttress.lock")
-	// Pre-create the lock file with custom content.
-	if err := os.WriteFile(lockPath, []byte(`{"existing":true}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := runInitConsumer(dir); err != nil {
-		t.Fatalf("runInitConsumer() error: %v", err)
-	}
-	// Content must be unchanged.
-	body, _ := os.ReadFile(lockPath)
-	if !strings.Contains(string(body), "existing") {
-		t.Errorf("lock file overwritten; got %q", body)
-	}
-}
-
-// ---------------------------------------------------------------------------
 // newInitCmd metadata
 // ---------------------------------------------------------------------------
 
@@ -220,34 +169,7 @@ func TestNewInitCmd_Metadata(t *testing.T) {
 	if cmd.Short == "" {
 		t.Error("Short is empty")
 	}
-}
-
-func TestNewInitCmd_RunE_ConsumerNoArgs(t *testing.T) {
-	// Execute the cobra command's RunE with no args (consumer mode, uses ".").
-	// This covers the RunE closure branches: no explicit dir arg, no --spec.
-	t.Parallel()
-	dir := t.TempDir()
-	cmd := newInitCmd()
-	cmd.SetArgs([]string{dir})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error: %v", err)
-	}
-	lockPath := filepath.Join(dir, "buttress.lock")
-	if _, err := os.Stat(lockPath); err != nil {
-		t.Errorf("lock file not created: %v", err)
-	}
-}
-
-func TestNewInitCmd_RunE_ConsumerExplicitDir(t *testing.T) {
-	// Exercise the `dir = args[0]` branch.
-	t.Parallel()
-	dir := filepath.Join(t.TempDir(), "newproject")
-	cmd := newInitCmd()
-	cmd.SetArgs([]string{dir})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("Execute() error: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(dir, "buttress.lock")); err != nil {
-		t.Errorf("lock file not created: %v", err)
+	if cmd.Flags().Lookup("spec") != nil {
+		t.Error("--spec flag should not exist; spec scaffold is now the default behavior")
 	}
 }

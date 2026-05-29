@@ -39,11 +39,9 @@ buttress spec add @org/pkg --versions-url https://…/VERSIONS.txt
 # Generate an implementation from an already-installed spec
 buttress spec generate @org/pkg
 
-# Initialize a consumer project (creates an empty buttress.lock)
-buttress spec init
-
 # Scaffold a new spec package (interactive wizard for spec authors)
-buttress spec init --spec
+buttress spec init
+buttress spec init ./my-spec
 
 # List installed spec packages
 buttress spec list

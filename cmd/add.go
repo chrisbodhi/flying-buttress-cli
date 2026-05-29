@@ -111,6 +111,14 @@ func runAdd(ctx context.Context, deps *addDeps, rawRef, versionsURL string, doGe
 		return errors.New("--generate requires LLM credentials in ~/.config/buttress/config.toml")
 	}
 
+	wd, err := deps.getwd()
+	if err != nil {
+		return fmt.Errorf("determining working directory: %w", err)
+	}
+	lockPath := filepath.Join(wd, "buttress.lock")
+	_, lockErr := os.Stat(lockPath)
+	newProject := os.IsNotExist(lockErr)
+
 	// --- 1. Parse the package reference ---
 	pkg, err := ref.ParsePackageRef(rawRef)
 	if err != nil {
@@ -146,7 +154,7 @@ func runAdd(ctx context.Context, deps *addDeps, rawRef, versionsURL string, doGe
 	}
 
 	// --- 3. Check if already installed ---
-	st, err := deps.newStore(cfg.Registry.CacheDir, "")
+	st, err := deps.newStore(cfg.Registry.CacheDir, wd)
 	if err != nil {
 		return err
 	}
@@ -199,6 +207,9 @@ func runAdd(ctx context.Context, deps *addDeps, rawRef, versionsURL string, doGe
 		return err
 	}
 
+	if newProject {
+		fmt.Fprintf(deps.stdout, "%s created buttress.lock\n", tui.StyleSuccess.Render("✓"))
+	}
 	fmt.Fprintf(deps.stdout, "%s added %s (%s)\n",
 		tui.StyleSuccess.Render("✓"),
 		tui.StyleTitle.Render(pkg.Name()),
@@ -206,10 +217,6 @@ func runAdd(ctx context.Context, deps *addDeps, rawRef, versionsURL string, doGe
 
 	// --- 7. Optionally generate ---
 	if doGenerate {
-		wd, err := deps.getwd()
-		if err != nil {
-			return fmt.Errorf("determining working directory: %w", err)
-		}
 		outPath, lang, err := resolveGenOutput(wd, pkg, cfg)
 		if err != nil {
 			return err

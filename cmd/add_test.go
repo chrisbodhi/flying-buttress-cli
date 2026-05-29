@@ -550,6 +550,23 @@ func TestRunAdd_ReplacesOldVersion(t *testing.T) {
 	}
 }
 
+func TestRunAdd_CreatesLockFileForNewProject(t *testing.T) {
+	t.Parallel()
+
+	fx := newFixture(t, nil)
+	// projDir has no buttress.lock yet (newFixture only creates the directory).
+	if err := runAdd(context.Background(), fx.deps, "@acme/widget@sha256:abc", "", false); err != nil {
+		t.Fatalf("runAdd() error: %v", err)
+	}
+	lockPath := filepath.Join(fx.projDir, "buttress.lock")
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Errorf("buttress.lock not created: %v", err)
+	}
+	if !strings.Contains(fx.stdout.String(), "created buttress.lock") {
+		t.Errorf("stdout missing 'created buttress.lock': %q", fx.stdout.String())
+	}
+}
+
 func TestRunAdd_ListVersionsError(t *testing.T) {
 	t.Parallel()
 
