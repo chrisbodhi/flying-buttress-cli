@@ -52,7 +52,9 @@ func buildSystemPrompt(req Request, _ *specmeta.SpecMeta) (string, error) {
 			"  1. Use the exact types declared in TYPE DEFINITIONS\n"+
 			"  2. Pass every test in the TESTS section\n"+
 			"  3. No TypeScript compiler errors (strict mode)\n"+
-			"Output ONLY the implementation code. No code fences, no explanations.\n",
+			"Output ONLY the implementation source code.\n"+
+			"Do NOT include code fences, explanations, reasoning, revision notes,\n"+
+			"or any text other than the implementation itself.\n",
 		req.Language,
 	)
 
@@ -63,7 +65,8 @@ func buildSystemPrompt(req Request, _ *specmeta.SpecMeta) (string, error) {
 // It carries only the error output — the spec files stay in the system message.
 func buildFixMessage(errSections []string) string {
 	var sb strings.Builder
-	sb.WriteString("The implementation has errors. Fix them and output ONLY the corrected code.\n\n")
+	sb.WriteString("The implementation has errors. Fix them and output ONLY the corrected source code.\n" +
+		"No code fences, no explanations, no revision notes — just the fixed code.\n\n")
 	for _, s := range errSections {
 		sb.WriteString(s)
 		sb.WriteString("\n\n")
