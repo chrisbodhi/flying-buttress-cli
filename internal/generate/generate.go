@@ -68,15 +68,17 @@ type LLMConfig struct {
 
 // LLMGenerator calls an OpenAI-compatible chat completions endpoint.
 type LLMGenerator struct {
-	cfg    LLMConfig
-	client *http.Client
+	cfg       LLMConfig
+	client    *http.Client
+	writeFile func(string, []byte, os.FileMode) error
 }
 
 // NewLLMGenerator returns a generator backed by the given LLM config.
 func NewLLMGenerator(cfg LLMConfig) *LLMGenerator {
 	return &LLMGenerator{
-		cfg:    cfg,
-		client: &http.Client{Timeout: 5 * time.Minute},
+		cfg:       cfg,
+		client:    &http.Client{Timeout: 5 * time.Minute},
+		writeFile: os.WriteFile,
 	}
 }
 
@@ -119,7 +121,7 @@ func (g *LLMGenerator) Generate(ctx context.Context, req Request) error {
 		if err := os.MkdirAll(filepath.Dir(req.OutputPath), 0o755); err != nil {
 			return fmt.Errorf("creating output directory: %w", err)
 		}
-		if err := os.WriteFile(req.OutputPath, []byte(code), 0o644); err != nil {
+		if err := g.writeFile(req.OutputPath, []byte(code), 0o644); err != nil {
 			return fmt.Errorf("writing generated file: %w", err)
 		}
 
