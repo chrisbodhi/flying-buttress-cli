@@ -262,23 +262,18 @@ func TestLLMGenerator_Generate_WriteFileError(t *testing.T) {
 	srv := newFakeChatServer(t)
 	srv.replies = []string{"impl"}
 	g := NewLLMGenerator(LLMConfig{BaseURL: srv.URL(), Model: "m"})
-
-	// outputPath parent exists but is read-only so WriteFile will fail.
-	dir := t.TempDir()
-	roDir := filepath.Join(dir, "ro")
-	if err := os.MkdirAll(roDir, 0o555); err != nil {
-		t.Fatal(err)
+	g.writeFile = func(string, []byte, os.FileMode) error {
+		return errors.New("disk full")
 	}
-	out := filepath.Join(roDir, "out.go")
 
 	err := g.Generate(context.Background(), Request{
 		Spec:       writeMinimalSpec(t),
 		Language:   "go",
-		OutputPath: out,
+		OutputPath: filepath.Join(t.TempDir(), "out.go"),
 		ProjectDir: t.TempDir(),
 	})
 	if err == nil {
-		t.Fatal("expected error writing to read-only directory")
+		t.Fatal("expected error writing generated file")
 	}
 	if !strings.Contains(err.Error(), "writing generated file") {
 		t.Errorf("error = %q, want substring 'writing generated file'", err)
