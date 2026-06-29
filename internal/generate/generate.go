@@ -116,7 +116,7 @@ func (g *LLMGenerator) Generate(ctx context.Context, req Request) error {
 		if err != nil {
 			return err
 		}
-		code = stripCodeFences(code)
+		code = extractCode(code)
 
 		if err := os.MkdirAll(filepath.Dir(req.OutputPath), 0o755); err != nil {
 			return fmt.Errorf("creating output directory: %w", err)
@@ -255,16 +255,78 @@ func isTextFile(path string) bool {
 	return !skip[ext]
 }
 
-// stripCodeFences removes markdown code fences if the LLM wrapped its output.
-func stripCodeFences(s string) string {
+// extractCode extracts the implementation from an LLM response.
+//
+// Real-world output patterns handled:
+//  1. Clean code   — no fences, just source (returned trimmed).
+//  2. Single fence — entire response wrapped in ```lang … ``` (fences stripped).
+//  3. CoT + fence  — prose or a draft followed by a fenced final answer;
+//     the LAST complete code block is returned because chain-of-thought
+//     models revise their output and put the correct version last.
+//  4. Think tags   — <think>…</think> sections are removed before extraction.
+func extractCode(s string) string {
 	s = strings.TrimSpace(s)
-	if strings.HasPrefix(s, "```") {
-		if idx := strings.Index(s, "\n"); idx != -1 {
-			s = s[idx+1:]
-		}
-		if i := strings.LastIndex(s, "```"); i != -1 {
-			s = strings.TrimRight(s[:i], "\n")
-		}
+	s = stripThinkBlocks(s)
+	s = strings.TrimSpace(s)
+	if block, ok := lastCodeBlock(s); ok {
+		return block + "\n"
 	}
 	return s + "\n"
+}
+
+// stripThinkBlocks removes <think>…</think> sections emitted by reasoning
+// models. Unclosed tags are stripped from the open tag to end of string.
+func stripThinkBlocks(s string) string {
+	const open, close = "<think>", "</think>"
+	for {
+		lo := strings.ToLower(s)
+		start := strings.Index(lo, open)
+		if start == -1 {
+			break
+		}
+		end := strings.Index(lo[start:], close)
+		if end == -1 {
+			s = strings.TrimSpace(s[:start])
+			break
+		}
+		end += start + len(close)
+		s = s[:start] + s[end:]
+	}
+	return s
+}
+
+// lastCodeBlock returns the content of the last complete code fence block in s
+// and true. If the final open fence has no matching close (truncated response),
+// the content from that fence to end-of-string is returned with true.
+// Returns ("", false) when no code fence is found at all.
+func lastCodeBlock(s string) (string, bool) {
+	lines := strings.Split(s, "\n")
+
+	type span struct{ start, end int }
+	var complete []span
+	inFence := false
+	fenceStart := 0
+
+	for i, line := range lines {
+		t := strings.TrimSpace(line)
+		if !inFence && strings.HasPrefix(t, "```") {
+			inFence = true
+			fenceStart = i
+		} else if inFence && t == "```" {
+			complete = append(complete, span{fenceStart, i})
+			inFence = false
+		}
+	}
+
+	if inFence {
+		// Unclosed block — take everything after the opening fence.
+		inner := lines[fenceStart+1:]
+		return strings.TrimRight(strings.Join(inner, "\n"), "\n"), true
+	}
+	if len(complete) == 0 {
+		return "", false
+	}
+	last := complete[len(complete)-1]
+	inner := lines[last.start+1 : last.end]
+	return strings.TrimRight(strings.Join(inner, "\n"), "\n"), true
 }

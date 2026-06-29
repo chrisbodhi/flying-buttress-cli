@@ -82,11 +82,12 @@ func writeMinimalSpec(t *testing.T) *SpecArchive {
 	return &SpecArchive{Dir: dir, ContentHash: "sha256:test"}
 }
 
-func TestStripCodeFences(t *testing.T) {
+func TestExtractCode(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name, in, want string
 	}{
+		// Legacy patterns (previously covered by stripCodeFences).
 		{"plain", "code here", "code here\n"},
 		{"fenced no lang", "```\ncode\n```", "code\n"},
 		{"fenced with lang", "```typescript\ncode\n```", "code\n"},
@@ -94,12 +95,49 @@ func TestStripCodeFences(t *testing.T) {
 		{"empty", "", "\n"},
 		{"only fences", "```\n```", "\n"},
 		{"trailing prose", "```ts\nimpl\n```\nthen prose", "impl\n"},
+
+		// Chain-of-thought: draft code (no fence) followed by fenced revision.
+		{
+			"cot draft then fenced",
+			"const x = buggy();\n\nWait, that's wrong.\n\n```ts\nconst x = correct();\n```",
+			"const x = correct();\n",
+		},
+		// Multiple code blocks: last one is the final answer.
+		{
+			"multiple blocks takes last",
+			"```ts\nfirst version\n```\n\nActually:\n\n```ts\nsecond version\n```",
+			"second version\n",
+		},
+		// Think-tag stripping.
+		{
+			"think tags stripped",
+			"<think>\nsome reasoning\n</think>\n```ts\nconst x = 1;\n```",
+			"const x = 1;\n",
+		},
+		{
+			"think tags stripped case insensitive",
+			"<THINK>reasoning</THINK>\n```ts\nfoo()\n```",
+			"foo()\n",
+		},
+		// Unclosed think tag: strip from open tag to end, then fall back to
+		// whatever remains (here, nothing useful — returns "\n").
+		{
+			"unclosed think tag",
+			"<think>reasoning without closing",
+			"\n",
+		},
+		// Unclosed code fence: take content from the open fence to end.
+		{
+			"unclosed code fence",
+			"preamble\n```ts\nconst x = 1;",
+			"const x = 1;\n",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := stripCodeFences(tt.in); got != tt.want {
-				t.Errorf("stripCodeFences(%q) = %q, want %q", tt.in, got, tt.want)
+			if got := extractCode(tt.in); got != tt.want {
+				t.Errorf("extractCode(%q) = %q, want %q", tt.in, got, tt.want)
 			}
 		})
 	}
